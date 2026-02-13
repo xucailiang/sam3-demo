@@ -5,6 +5,8 @@ import { assignMaskColors, calculateScaledSize } from '../utils/canvas';
 import { useBatchSegmentation } from '../hooks/useBatchSegmentation';
 import { useSegmentation } from '../hooks/useSegmentation';
 import { exportBatchAsZIP } from '../utils/export';
+import { FilterControls } from './FilterControls';
+import { sortByConfidence, filterByConfidence, getFilterStats } from '../utils/filter';
 
 const CANVAS_MAX = 520;
 const RESULT_CANVAS_MAX = 400;
@@ -41,6 +43,28 @@ export function SampleWorkflow() {
   // === Step 3: View detail ===
   const [viewIndex, setViewIndex] = useState<number | null>(null);
 
+  // === Filter and selection state ===
+  const [filterThreshold, setFilterThreshold] = useState<number>(0.80);
+  const [batchSelectionState, setBatchSelectionState] = useState<Map<number, Map<number, boolean>>>(new Map());
+
+  // === Inference confidence (backend conf parameter) ===
+  const [inferenceConfidence, setInferenceConfidence] = useState<number>(0.25);
+
+  // Get selection map for current viewed image
+  const currentSelectionMap = viewIndex !== null 
+    ? (batchSelectionState.get(viewIndex) ?? new Map<number, boolean>())
+    : new Map<number, boolean>();
+
+  // Update selection map for current viewed image
+  const handleSelectionChange = useCallback((newSelectionMap: Map<number, boolean>) => {
+    if (viewIndex === null) return;
+    setBatchSelectionState(prev => {
+      const next = new Map(prev);
+      next.set(viewIndex, newSelectionMap);
+      return next;
+    });
+  }, [viewIndex]);
+
   // Upload error
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -63,6 +87,9 @@ export function SampleWorkflow() {
     clearResults();
     setViewIndex(null);
     setUploadError(null);
+    // Reset filter state (Requirement 6.2)
+    setFilterThreshold(0.80);
+    setBatchSelectionState(new Map());
   }, [mode, clearSampleResult, clearResults]);
 
   // --- Sample image upload ---
@@ -242,16 +269,20 @@ export function SampleWorkflow() {
 
   // --- Batch segment ---
   const handleBatchSegment = useCallback(async () => {
+    // Reset filter state when starting new batch (Requirement 6.2)
+    setFilterThreshold(0.80);
+    setBatchSelectionState(new Map());
+    
     if (mode === 'stitch') {
       // Mode A: stitch segmentation
       if (!sampleFile || !sampleBox || batchFiles.length === 0) return;
-      await batchSegmentWithStitch(batchFiles, sampleFile, sampleBox);
+      await batchSegmentWithStitch(batchFiles, sampleFile, sampleBox, inferenceConfidence);
     } else {
       // Mode B: text segmentation
       if (!textPrompt.trim() || batchFiles.length === 0) return;
       await batchSegmentWithText(batchFiles, textPrompt.trim());
     }
-  }, [mode, sampleFile, sampleBox, batchFiles, textPrompt, batchSegmentWithStitch, batchSegmentWithText]);
+  }, [mode, sampleFile, sampleBox, batchFiles, textPrompt, batchSegmentWithStitch, batchSegmentWithText, inferenceConfidence]);
 
   const canBatchModeA = sampleFile !== null && sampleBox !== null && batchFiles.length > 0 && !isProcessing;
   const canBatchModeB = textPrompt.trim().length > 0 && batchFiles.length > 0 && !isProcessing;
@@ -394,6 +425,34 @@ export function SampleWorkflow() {
             </div>
           )}
 
+          {/* Inference confidence slider - only for stitch mode */}
+          {mode === 'stitch' && (
+            <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: '#1e1e1e', borderRadius: 4, border: '1px solid #444' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <label htmlFor="inference-confidence" style={{ fontSize: '0.85rem', color: '#ccc', whiteSpace: 'nowrap' }}>
+                  推理置信度
+                </label>
+                <input
+                  id="inference-confidence"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={inferenceConfidence * 100}
+                  onChange={(e) => setInferenceConfidence(Number(e.target.value) / 100)}
+                  disabled={isProcessing}
+                  style={{ flex: 1, minWidth: 100, maxWidth: 200 }}
+                />
+                <span style={{ fontSize: '0.85rem', color: '#4ECDC4', fontWeight: 600, minWidth: 45 }}>
+                  {(inferenceConfidence * 100).toFixed(0)}%
+                </span>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#888', margin: '0.35rem 0 0' }}>
+                提高此值可减少返回的低置信度结果，降低可获得更多候选对象
+              </p>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button onClick={handleBatchSegment} disabled={!canBatch} style={canBatch ? btnPrimary : btnDisabled}>
               {isProcessing ? '处理中...' : '开始批量分割'}
@@ -441,7 +500,13 @@ export function SampleWorkflow() {
             gap: '0.75rem',
           }}>
             {batchResults.map((r, i) => (
-              <ResultCard key={i} batchResult={r} isSelected={viewIndex === i} onClick={() => setViewIndex(viewIndex === i ? null : i)} />
+              <ResultCard 
+                key={i} 
+                batchResult={r} 
+                isSelected={viewIndex === i} 
+                onClick={() => setViewIndex(viewIndex === i ? null : i)}
+                selectionMap={batchSelectionState.get(i)}
+              />
             ))}
           </div>
 
@@ -451,7 +516,13 @@ export function SampleWorkflow() {
 
           {/* Detail view */}
           {viewIndex !== null && batchResults[viewIndex]?.result && (
-            <ResultDetail batchResult={batchResults[viewIndex]} />
+            <ResultDetail 
+              batchResult={batchResults[viewIndex]} 
+              threshold={filterThreshold}
+              onThresholdChange={setFilterThreshold}
+              selectionMap={currentSelectionMap}
+              onSelectionChange={handleSelectionChange}
+            />
           )}
         </section>
       )}
@@ -461,13 +532,20 @@ export function SampleWorkflow() {
 
 
 /** Thumbnail card for a batch result */
-function ResultCard({ batchResult, isSelected, onClick }: {
+function ResultCard({ batchResult, isSelected, onClick, selectionMap }: {
   batchResult: BatchResult;
   isSelected: boolean;
   onClick: () => void;
+  selectionMap?: Map<number, boolean>;
 }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const hasResult = batchResult.result && batchResult.result.count > 0;
+  
+  // Calculate selected count from selectionMap
+  const totalCount = batchResult.result?.count ?? 0;
+  const selectedCount = selectionMap 
+    ? Array.from(selectionMap.values()).filter(v => v).length 
+    : totalCount;
 
   // Create and cleanup blob URL
   useEffect(() => {
@@ -505,7 +583,7 @@ function ResultCard({ batchResult, isSelected, onClick }: {
         </span>
         {hasResult && (
           <span style={{ fontSize: '0.75rem', color: '#4ECDC4', fontWeight: 600 }}>
-            {batchResult.result!.count} 个
+            {selectedCount}/{totalCount} 选中
           </span>
         )}
         {batchResult.error && (
@@ -520,20 +598,85 @@ function ResultCard({ batchResult, isSelected, onClick }: {
 }
 
 /** Detail view for a single batch result with mask overlay */
-function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
+function ResultDetail({ 
+  batchResult,
+  threshold,
+  onThresholdChange,
+  selectionMap,
+  onSelectionChange,
+}: { 
+  batchResult: BatchResult;
+  threshold: number;
+  onThresholdChange: (threshold: number) => void;
+  selectionMap: Map<number, boolean>;
+  onSelectionChange: (selectionMap: Map<number, boolean>) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imgEl, setImgEl] = useState<HTMLImageElement | null>(null);
   const [imgUrl, setImgUrl] = useState<string | null>(null);
 
   const result = batchResult.result;
   
-  // Compute colored masks (safe even if result is null)
-  const coloredMasks = result
+  // Compute colored masks with original indices (safe even if result is null)
+  const coloredMasks: (MaskData & { originalIndex: number })[] = result
     ? (() => {
         const colors = assignMaskColors(result.masks.length);
-        return result.masks.map((m, i) => ({ ...m, color: colors[i] }));
+        return result.masks.map((m, i) => ({ ...m, color: colors[i], originalIndex: i }));
       })()
     : [];
+
+  // Sort masks by confidence (descending) - Requirement 2.1
+  const sortedMasks = sortByConfidence(coloredMasks);
+
+  // Filter masks by threshold - Requirement 1.2
+  const filteredMasks = filterByConfidence(sortedMasks, threshold);
+
+  // Get filtered indices for batch operations
+  const filteredIndices = filteredMasks.map(m => m.originalIndex);
+
+  // Calculate filter stats - Requirement 5.1
+  const stats = getFilterStats(result?.masks ?? [], threshold, selectionMap);
+
+  // Helper to check if a mask is selected (default to true)
+  const isMaskSelected = (originalIndex: number) => selectionMap.get(originalIndex) ?? true;
+
+  // Toggle selection for a mask
+  const toggleSelection = (originalIndex: number) => {
+    const newMap = new Map(selectionMap);
+    const current = newMap.get(originalIndex) ?? true;
+    newMap.set(originalIndex, !current);
+    onSelectionChange(newMap);
+  };
+
+  // Batch operations
+  const handleSelectAll = () => {
+    const newMap = new Map(selectionMap);
+    for (const index of filteredIndices) {
+      newMap.set(index, true);
+    }
+    onSelectionChange(newMap);
+  };
+
+  const handleSelectNone = () => {
+    const newMap = new Map(selectionMap);
+    for (const key of newMap.keys()) {
+      newMap.set(key, false);
+    }
+    // Also set filtered indices to false
+    for (const index of filteredIndices) {
+      newMap.set(index, false);
+    }
+    onSelectionChange(newMap);
+  };
+
+  const handleInvertSelection = () => {
+    const newMap = new Map(selectionMap);
+    for (const index of filteredIndices) {
+      const current = newMap.get(index) ?? true;
+      newMap.set(index, !current);
+    }
+    onSelectionChange(newMap);
+  };
 
   // Create stable blob URL for the file
   useEffect(() => {
@@ -566,6 +709,9 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
     ? calculateScaledSize(imgEl.naturalWidth, imgEl.naturalHeight, RESULT_CANVAS_MAX, RESULT_CANVAS_MAX).scaledHeight
     : 300;
 
+  // Store mask pixel data for click detection
+  const maskPixelDataRef = useRef<Map<number, ImageData>>(new Map());
+
   // Draw result canvas with mask overlays
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -583,7 +729,8 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
     ctx.drawImage(imgEl, 0, 0, cW, cH);
 
     // If no masks, we're done
-    if (coloredMasks.length === 0) {
+    if (filteredMasks.length === 0) {
+      maskPixelDataRef.current.clear();
       return;
     }
 
@@ -596,13 +743,18 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
       ctx.clearRect(0, 0, cW, cH);
       ctx.drawImage(imgEl, 0, 0, cW, cH);
       
+      // Clear and rebuild mask pixel data for click detection
+      maskPixelDataRef.current.clear();
+      
       // Draw each mask overlay
       for (let i = 0; i < maskImgs.length; i++) {
         const mi = maskImgs[i];
+        const mask = filteredMasks[i];
         if (!mi.complete || mi.naturalWidth === 0) {
-          console.log(`Skipping mask ${i}: not loaded`);
           continue;
         }
+        
+        const isSelected = isMaskSelected(mask.originalIndex);
         
         // Create a canvas to extract mask data
         const maskCanvas = document.createElement('canvas');
@@ -617,6 +769,9 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
         // Get mask pixel data
         const maskData = maskCtx.getImageData(0, 0, cW, cH);
         
+        // Store mask pixel data for click detection
+        maskPixelDataRef.current.set(mask.originalIndex, maskData);
+        
         // Create colored overlay using mask as alpha
         const overlayCanvas = document.createElement('canvas');
         overlayCanvas.width = cW;
@@ -625,7 +780,7 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
         if (!overlayCtx) continue;
         
         // Parse the color
-        const color = coloredMasks[i].color;
+        const color = mask.color;
         let r = 0, g = 0, b = 0;
         if (color.startsWith('#')) {
           r = parseInt(color.slice(1, 3), 16);
@@ -643,20 +798,18 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
         // Create overlay image data
         const overlayData = overlayCtx.createImageData(cW, cH);
         for (let j = 0; j < maskData.data.length; j += 4) {
-          // Use mask's red channel (grayscale) as alpha
-          // Mask is 0 (black) for background, 255 (white) for foreground
           const maskValue = maskData.data[j]; // R channel of grayscale mask
           overlayData.data[j] = r;
           overlayData.data[j + 1] = g;
           overlayData.data[j + 2] = b;
-          overlayData.data[j + 3] = maskValue; // Use mask value as alpha
+          overlayData.data[j + 3] = maskValue;
         }
         
         overlayCtx.putImageData(overlayData, 0, 0);
         
-        // Draw overlay with transparency
+        // Draw overlay with transparency - reduced for unselected masks (Requirement 3.4)
         ctx.save();
-        ctx.globalAlpha = 0.45;
+        ctx.globalAlpha = isSelected ? 0.45 : 0.15;
         ctx.drawImage(overlayCanvas, 0, 0);
         ctx.restore();
       }
@@ -665,55 +818,100 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
       const sx = cW / imgEl.naturalWidth;
       const sy = cH / imgEl.naturalHeight;
       
-      for (let i = 0; i < coloredMasks.length; i++) {
-        const m = coloredMasks[i];
+      for (let i = 0; i < filteredMasks.length; i++) {
+        const m = filteredMasks[i];
+        const isSelected = isMaskSelected(m.originalIndex);
         const [bx1, by1, bx2, by2] = m.bbox;
         
-        ctx.strokeStyle = m.color;
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isSelected ? m.color : '#666';
+        ctx.lineWidth = isSelected ? 1.5 : 1;
         ctx.strokeRect(bx1 * sx, by1 * sy, (bx2 - bx1) * sx, (by2 - by1) * sy);
         
         // Score label
         const label = `${(m.score * 100).toFixed(1)}%`;
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillStyle = isSelected ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)';
         const tx = bx1 * sx;
         const ty = Math.max(14, by1 * sy - 3);
         ctx.fillRect(tx, ty - 12, 42, 15);
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = isSelected ? '#fff' : '#888';
         ctx.font = '10px sans-serif';
         ctx.fillText(label, tx + 2, ty);
       }
     };
 
     // Load mask images
-    coloredMasks.forEach((m, i) => {
+    filteredMasks.forEach((m, i) => {
       const mi = new Image();
       mi.onload = () => {
+        console.log(`Mask ${i} loaded: naturalSize=${mi.naturalWidth}x${mi.naturalHeight}, bbox=${JSON.stringify(m.bbox)}`);
         loadedCount++;
-        if (loadedCount === coloredMasks.length) {
+        if (loadedCount === filteredMasks.length) {
           drawAllMasks();
         }
       };
       mi.onerror = () => {
         loadedCount++;
-        if (loadedCount === coloredMasks.length) {
+        if (loadedCount === filteredMasks.length) {
           drawAllMasks();
         }
       };
       mi.src = `data:image/png;base64,${m.maskBase64}`;
       maskImgs[i] = mi;
     });
-  }, [imgEl, coloredMasks, cW, cH, result]);
+  }, [imgEl, filteredMasks, cW, cH, result, selectionMap]);
+
+  // Handle canvas click to toggle mask selection (Requirement 3.3)
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !imgEl) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor(e.clientX - rect.left);
+    const y = Math.floor(e.clientY - rect.top);
+    
+    // Check each mask's pixel data to see if click is inside
+    // Check in reverse order (top masks first) to handle overlapping
+    for (let i = filteredMasks.length - 1; i >= 0; i--) {
+      const mask = filteredMasks[i];
+      const maskData = maskPixelDataRef.current.get(mask.originalIndex);
+      if (!maskData) continue;
+      
+      const pixelIndex = (y * cW + x) * 4;
+      const maskValue = maskData.data[pixelIndex]; // R channel
+      
+      if (maskValue > 128) { // Threshold for mask detection
+        toggleSelection(mask.originalIndex);
+        return;
+      }
+    }
+  }, [filteredMasks, cW, imgEl, toggleSelection]);
 
   // Early return after all hooks
   if (!result) return null;
 
   return (
     <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#1e1e1e', borderRadius: 6, border: '1px solid #444' }}>
+      {/* Filter Controls - Requirement 1.1 */}
+      <FilterControls
+        threshold={threshold}
+        onThresholdChange={onThresholdChange}
+        stats={stats}
+        onSelectAll={handleSelectAll}
+        onSelectNone={handleSelectNone}
+        onInvertSelection={handleInvertSelection}
+        disabled={coloredMasks.length === 0}
+      />
+      
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div>
           {imgEl ? (
-            <canvas ref={canvasRef} width={cW} height={cH} style={{ border: '1px solid #555', borderRadius: 4, display: 'block' }} />
+            <canvas 
+              ref={canvasRef} 
+              width={cW} 
+              height={cH} 
+              style={{ border: '1px solid #555', borderRadius: 4, display: 'block', cursor: 'pointer' }} 
+              onClick={handleCanvasClick}
+            />
           ) : (
             <div style={{ width: RESULT_CANVAS_MAX, height: 300, border: '1px solid #555', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
               加载中...
@@ -730,18 +928,48 @@ function ResultDetail({ batchResult }: { batchResult: BatchResult }) {
           <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: '#aaa' }}>
             图像尺寸: {result.imageSize[0]} × {result.imageSize[1]}
           </p>
-          {coloredMasks.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-              {coloredMasks.map((m, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
-                  <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: m.color }} />
-                  <span>对象 {i + 1}</span>
-                  <span style={{ color: '#aaa' }}>{(m.score * 100).toFixed(1)}%</span>
-                  <span style={{ color: '#666' }}>面积: {m.area.toLocaleString()}px</span>
-                </div>
-              ))}
+          {/* Mask list sorted by confidence with checkboxes - Requirements 2.1, 2.2, 3.1, 3.2 */}
+          {filteredMasks.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', maxHeight: 200, overflowY: 'auto' }}>
+              {filteredMasks.map((m) => {
+                const isSelected = isMaskSelected(m.originalIndex);
+                return (
+                  <div 
+                    key={m.originalIndex} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.4rem', 
+                      fontSize: '0.8rem',
+                      opacity: isSelected ? 1 : 0.5,
+                      cursor: 'pointer',
+                      padding: '0.15rem 0.25rem',
+                      borderRadius: 3,
+                      background: isSelected ? 'rgba(78, 205, 196, 0.1)' : 'transparent',
+                    }}
+                    onClick={() => toggleSelection(m.originalIndex)}
+                  >
+                    {/* Checkbox - Requirement 3.1 */}
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelection(m.originalIndex)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: m.color }} />
+                    <span>对象 {m.originalIndex + 1}</span>
+                    <span style={{ color: '#aaa' }}>{(m.score * 100).toFixed(1)}%</span>
+                    <span style={{ color: '#666' }}>面积: {m.area.toLocaleString()}px</span>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          ) : coloredMasks.length > 0 ? (
+            <p style={{ fontSize: '0.8rem', color: '#FFEAA7', margin: 0 }}>
+              当前阈值下无结果，请降低阈值
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

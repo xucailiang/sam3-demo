@@ -82,3 +82,43 @@ export interface BatchSegmentationResponse {
   data?: BatchSegmentationResult;
   error?: string;
 }
+
+// ============================================
+// Mode A Result Filtering Types
+// ============================================
+
+/** 带选择状态的掩码数据 */
+export interface SelectableMaskData extends MaskData {
+  /** 原始索引（用于追踪） */
+  originalIndex: number;
+  /** 是否被选中 */
+  isSelected: boolean;
+  /** 是否通过过滤（高于阈值） */
+  passesFilter: boolean;
+}
+
+/** 过滤结果统计 */
+export interface FilterStats {
+  /** 总检测数量 */
+  totalCount: number;
+  /** 过滤后数量（高于阈值） */
+  filteredCount: number;
+  /** 选中数量 */
+  selectedCount: number;
+}
+
+/** 单张图片的选择状态 */
+export interface ImageSelectionState {
+  /** 掩码选择状态 Map */
+  selectionMap: Map<number, boolean>;
+  /** 最后更新时间 */
+  lastUpdated: number;
+}
+
+/** 批量结果的选择状态 */
+export interface BatchSelectionState {
+  /** 图片索引 -> 选择状态 */
+  imageStates: Map<number, ImageSelectionState>;
+  /** 全局置信度阈值 */
+  globalThreshold: number;
+}

@@ -70,8 +70,8 @@ def filter_and_offset_results(
 ) -> tuple:
     """过滤样品区域结果，偏移目标区域坐标，裁剪掩码。
 
-    过滤规则：bbox 的 x2 <= sample_width 的结果被丢弃。
-    偏移规则：保留结果的 bbox x 坐标减去 sample_width。
+    过滤规则：bbox 中心点在目标区域内（center_x > sample_width）的结果被保留。
+    偏移规则：保留结果的 bbox x 坐标减去 sample_width，并裁剪到有效范围。
     裁剪规则：掩码先缩放到拼接图尺寸，然后从 x=sample_width 开始裁剪，
               宽度为 target_width，高度裁剪为 target_height。
 
@@ -88,7 +88,7 @@ def filter_and_offset_results(
     Returns:
         tuple: (filtered_masks, filtered_boxes, filtered_scores)
             - filtered_masks: (M, target_height, target_width)
-            - filtered_boxes: (M, 4) 偏移后的坐标
+            - filtered_boxes: (M, 4) 偏移后的坐标（已裁剪到有效范围）
             - filtered_scores: (M,)
     """
     if len(masks) == 0:
@@ -98,16 +98,28 @@ def filter_and_offset_results(
             np.empty((0,), dtype=scores.dtype),
         )
 
-    # 过滤：保留 x2 > sample_width 的结果（即不完全在样品区域内的）
-    keep = boxes[:, 2] > sample_width
+    # 过滤：保留中心点在目标区域内的结果
+    # 这比只检查 x2 > sample_width 更合理，避免保留主体在样品区域的对象
+    center_x = (boxes[:, 0] + boxes[:, 2]) / 2
+    keep = center_x > sample_width
 
     filtered_masks = masks[keep]
     filtered_boxes = boxes[keep][:, :4].copy()
     filtered_scores = scores[keep]
 
-    # 偏移：x 坐标减去 sample_width
-    filtered_boxes[:, 0] -= sample_width  # x1
-    filtered_boxes[:, 2] -= sample_width  # x2
+    if len(filtered_boxes) == 0:
+        return (
+            np.empty((0, target_height, target_width), dtype=masks.dtype),
+            np.empty((0, 4), dtype=boxes.dtype),
+            np.empty((0,), dtype=scores.dtype),
+        )
+
+    # 偏移：x 坐标减去 sample_width，并裁剪到有效范围 [0, target_width]
+    filtered_boxes[:, 0] = np.clip(filtered_boxes[:, 0] - sample_width, 0, target_width)
+    filtered_boxes[:, 2] = np.clip(filtered_boxes[:, 2] - sample_width, 0, target_width)
+    # y 坐标裁剪到有效范围 [0, target_height]
+    filtered_boxes[:, 1] = np.clip(filtered_boxes[:, 1], 0, target_height)
+    filtered_boxes[:, 3] = np.clip(filtered_boxes[:, 3], 0, target_height)
 
     # 将掩码缩放到拼接图尺寸，然后裁剪目标区域
     result_masks = []
@@ -305,6 +317,7 @@ class SegmentationService:
         target_image: np.ndarray,
         sample_image: np.ndarray,
         sample_box: List[float],
+        confidence: float = 0.25,
     ) -> SegmentationResult:
         """拼接分割 - 将样品图和目标图拼接后使用 BBox 推理
 
@@ -319,6 +332,7 @@ class SegmentationService:
             target_image: 目标图像 (H2, W2, 3) RGB 格式
             sample_image: 样品图像 (H1, W1, 3) RGB 格式
             sample_box: 样品边界框 [x1, y1, x2, y2]
+            confidence: 置信度阈值 (0-1)，默认 0.25
 
         Returns:
             SegmentationResult: 分割结果（坐标已还原为目标图坐标系）
@@ -328,7 +342,7 @@ class SegmentationService:
         """
         start_time = time.time()
 
-        logger.info(f"Starting stitch segmentation with sample_box: {sample_box}")
+        logger.info(f"Starting stitch segmentation with sample_box: {sample_box}, confidence: {confidence}")
 
         try:
             # 1. 拼接图像
@@ -344,8 +358,15 @@ class SegmentationService:
 
             # 3. 在拼接图上推理
             predictor = self.model_manager.get_semantic_predictor()
-            predictor.set_image(stitched)
-            results = predictor(bboxes=[sample_box])
+            # 临时设置置信度阈值
+            original_conf = predictor.args.conf
+            predictor.args.conf = confidence
+            try:
+                predictor.set_image(stitched)
+                results = predictor(bboxes=[sample_box])
+            finally:
+                # 恢复原始置信度
+                predictor.args.conf = original_conf
 
             # 4. 提取原始掩码和边界框
             masks_list = []
@@ -392,6 +413,22 @@ class SegmentationService:
             masks_data: List[MaskData] = []
             for i in range(len(filtered_masks)):
                 mask_np = filtered_masks[i].astype(np.uint8) * 255
+                
+                # 调试：检查掩码内容与 bbox 的一致性
+                rows = np.any(mask_np > 0, axis=1)
+                cols = np.any(mask_np > 0, axis=0)
+                if np.any(rows) and np.any(cols):
+                    y_indices = np.where(rows)[0]
+                    x_indices = np.where(cols)[0]
+                    mask_y1, mask_y2 = y_indices[0], y_indices[-1]
+                    mask_x1, mask_x2 = x_indices[0], x_indices[-1]
+                    bbox_debug = filtered_boxes[i]
+                    logger.info(
+                        f"Mask {i}: shape={mask_np.shape}, "
+                        f"mask_region=({mask_x1},{mask_y1})-({mask_x2},{mask_y2}), "
+                        f"bbox=({bbox_debug[0]:.0f},{bbox_debug[1]:.0f})-({bbox_debug[2]:.0f},{bbox_debug[3]:.0f})"
+                    )
+                
                 mask_base64 = self._encode_mask_to_base64(mask_np)
                 bbox = filtered_boxes[i].tolist()
                 score = float(filtered_scores[i])
@@ -476,6 +513,7 @@ class SegmentationService:
         target_images: List[np.ndarray],
         sample_image: np.ndarray,
         sample_box: List[float],
+        confidence: float = 0.25,
     ) -> List[SegmentationResult]:
         """批量拼接分割，逐张目标图处理
 
@@ -486,12 +524,13 @@ class SegmentationService:
             target_images: 目标图像列表
             sample_image: 样品图像
             sample_box: 样品边界框 [x1, y1, x2, y2]
+            confidence: 置信度阈值 (0-1)，默认 0.25
 
         Returns:
             List[SegmentationResult]: 分割结果列表，长度与 target_images 相同
         """
         results = []
-        logger.info(f"Starting batch stitch segmentation: {len(target_images)} images")
+        logger.info(f"Starting batch stitch segmentation: {len(target_images)} images, confidence: {confidence}")
 
         for idx, target_image in enumerate(target_images):
             try:
@@ -499,6 +538,7 @@ class SegmentationService:
                     target_image=target_image,
                     sample_image=sample_image,
                     sample_box=sample_box,
+                    confidence=confidence,
                 )
                 results.append(result)
             except Exception as e:
@@ -536,11 +576,23 @@ class SegmentationService:
         """
         masks_data: List[MaskData] = []
         
+        # 获取原图尺寸
+        orig_height, orig_width = image.shape[:2]
+        
         for r in results:
             if r.masks is not None:
                 for i, mask in enumerate(r.masks.data):
                     # 转换掩码为 numpy 数组
                     mask_np = mask.cpu().numpy().astype(np.uint8) * 255
+                    
+                    # 缩放 mask 到原图尺寸
+                    mask_h, mask_w = mask_np.shape[:2]
+                    if mask_h != orig_height or mask_w != orig_width:
+                        mask_np = cv2.resize(
+                            mask_np,
+                            (orig_width, orig_height),
+                            interpolation=cv2.INTER_NEAREST
+                        )
                     
                     # 编码为 Base64 PNG
                     mask_base64 = self._encode_mask_to_base64(mask_np)
@@ -573,9 +625,6 @@ class SegmentationService:
         # 计算处理时间
         processing_time_ms = (time.time() - start_time) * 1000
         
-        # 获取图像尺寸
-        height, width = image.shape[:2]
-        
         logger.info(
             f"Segmentation completed: {len(masks_data)} masks, "
             f"{processing_time_ms:.2f}ms"
@@ -585,7 +634,7 @@ class SegmentationService:
             masks=masks_data,
             count=len(masks_data),
             processing_time_ms=processing_time_ms,
-            image_size=(width, height),
+            image_size=(orig_width, orig_height),
         )
 
     def _process_point_results(
@@ -606,11 +655,23 @@ class SegmentationService:
         """
         masks_data: List[MaskData] = []
         
+        # 获取原图尺寸
+        orig_height, orig_width = image.shape[:2]
+        
         for r in results:
             if r.masks is not None:
                 for i, mask in enumerate(r.masks.data):
                     # 转换掩码为 numpy 数组
                     mask_np = mask.cpu().numpy().astype(np.uint8) * 255
+                    
+                    # 缩放 mask 到原图尺寸
+                    mask_h, mask_w = mask_np.shape[:2]
+                    if mask_h != orig_height or mask_w != orig_width:
+                        mask_np = cv2.resize(
+                            mask_np,
+                            (orig_width, orig_height),
+                            interpolation=cv2.INTER_NEAREST
+                        )
                     
                     # 编码为 Base64 PNG
                     mask_base64 = self._encode_mask_to_base64(mask_np)
@@ -638,9 +699,6 @@ class SegmentationService:
         # 计算处理时间
         processing_time_ms = (time.time() - start_time) * 1000
         
-        # 获取图像尺寸
-        height, width = image.shape[:2]
-        
         logger.info(
             f"Point segmentation completed: {len(masks_data)} masks, "
             f"{processing_time_ms:.2f}ms"
@@ -650,7 +708,7 @@ class SegmentationService:
             masks=masks_data,
             count=len(masks_data),
             processing_time_ms=processing_time_ms,
-            image_size=(width, height),
+            image_size=(orig_width, orig_height),
         )
     
     def _encode_mask_to_base64(self, mask: np.ndarray) -> str:

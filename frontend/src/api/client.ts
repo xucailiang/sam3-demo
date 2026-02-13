@@ -9,7 +9,7 @@ import type {
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 120000, // 2 minutes for large batch operations
 });
 
 /**
@@ -161,6 +161,7 @@ export async function segmentWithStitch(
   targetImage: File,
   sampleImage: File,
   sampleBox: BoxPrompt,
+  confidence: number = 0.25,
 ): Promise<SegmentationResult> {
   const formData = new FormData();
   formData.append('file', targetImage);
@@ -169,6 +170,7 @@ export async function segmentWithStitch(
     'sample_box',
     JSON.stringify([sampleBox.x1, sampleBox.y1, sampleBox.x2, sampleBox.y2]),
   );
+  formData.append('confidence', confidence.toString());
 
   try {
     const { data } = await api.post('/segment/stitch', formData);
@@ -235,6 +237,7 @@ export async function batchSegmentWithStitch(
   files: File[],
   sampleImage: File,
   sampleBox: BoxPrompt,
+  confidence: number = 0.25,
 ): Promise<BatchSegmentationResult> {
   const formData = new FormData();
   for (const file of files) {
@@ -245,6 +248,7 @@ export async function batchSegmentWithStitch(
     'sample_box',
     JSON.stringify([sampleBox.x1, sampleBox.y1, sampleBox.x2, sampleBox.y2]),
   );
+  formData.append('confidence', confidence.toString());
 
   try {
     const { data } = await api.post('/batch/stitch', formData);

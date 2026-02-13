@@ -106,6 +106,7 @@ async def batch_segment_with_stitch(
     files: List[UploadFile] = File(..., description="Target image files"),
     sample_file: UploadFile = File(..., description="Sample image file"),
     sample_box: str = Form(..., description="JSON [x1, y1, x2, y2] for sample region"),
+    confidence: float = Form(0.25, description="Confidence threshold for inference (0-1)"),
 ) -> BatchSegmentationResponse:
     """Batch stitch segmentation endpoint.
 
@@ -157,7 +158,7 @@ async def batch_segment_with_stitch(
     try:
         service = get_segmentation_service()
         results = await service.batch_segment_with_stitch(
-            target_images, sample_image, validated_box,
+            target_images, sample_image, validated_box, confidence=confidence,
         )
 
         success_count = sum(1 for r in results if r.count > 0)

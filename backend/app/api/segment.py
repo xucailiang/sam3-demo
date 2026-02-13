@@ -288,6 +288,7 @@ async def segment_with_stitch(
     file: UploadFile = File(..., description="Target image file to segment"),
     sample_file: UploadFile = File(..., description="Sample image file"),
     sample_box: str = Form(..., description="JSON array [x1, y1, x2, y2] for the sample region"),
+    confidence: float = Form(0.25, description="Confidence threshold for inference (0-1)"),
 ) -> SegmentationResponse:
     """Stitch segmentation endpoint.
 
@@ -337,7 +338,7 @@ async def segment_with_stitch(
     try:
         service = get_segmentation_service()
         result = await service.segment_with_stitch(
-            target_image, sample_image, validated_box
+            target_image, sample_image, validated_box, confidence=confidence,
         )
 
         return SegmentationResponse(

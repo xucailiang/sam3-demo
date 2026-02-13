@@ -14,6 +14,7 @@ export interface UseBatchSegmentationReturn {
     files: File[],
     sampleImage: File,
     sampleBox: BoxPrompt,
+    confidence?: number,
   ) => Promise<void>;
   cancelBatch: () => void;
   clearResults: () => void;
@@ -82,7 +83,7 @@ export function useBatchSegmentation(): UseBatchSegmentationReturn {
   );
 
   const batchSegmentWithStitch = useCallback(
-    async (files: File[], sampleImage: File, sampleBox: BoxPrompt) => {
+    async (files: File[], sampleImage: File, sampleBox: BoxPrompt, confidence: number = 0.25) => {
       cancelledRef.current = false;
       setIsProcessing(true);
       setResults([]);
@@ -98,6 +99,7 @@ export function useBatchSegmentation(): UseBatchSegmentationReturn {
           files,
           sampleImage,
           sampleBox,
+          confidence,
         );
 
         if (cancelledRef.current) return;

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useReducer } from 'react';
 import type { InteractionMode, PointPrompt, BoxPrompt, MaskData } from '../types';
 import { calculateScaledSize, canvasToImage as canvasToImageUtil, imageToCanvas as imageToCanvasUtil, normalizeBoundingBox } from '../utils/canvas';
 
@@ -51,6 +51,8 @@ export function ImageCanvas({
   const maskCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
+  // Force re-render when mask images finish loading
+  const [, forceUpdate] = useReducer((x) => x + 1, 0);
 
   // Compute scaled dimensions
   const scaled = image
@@ -93,13 +95,46 @@ export function ImageCanvas({
   // Decode mask base64 images and cache them
   useEffect(() => {
     const cache = maskCacheRef.current;
+    let pendingCount = 0;
+    
     masks.forEach((m) => {
       if (!cache.has(m.maskBase64)) {
+        pendingCount++;
         const img = new Image();
+        img.onload = () => {
+          pendingCount--;
+          if (pendingCount === 0) {
+            // All mask images loaded, trigger re-render
+            forceUpdate();
+          }
+        };
+        img.onerror = () => {
+          pendingCount--;
+          if (pendingCount === 0) {
+            forceUpdate();
+          }
+        };
         img.src = `data:image/png;base64,${m.maskBase64}`;
         cache.set(m.maskBase64, img);
       }
     });
+    
+    // If all masks were already cached, check if they're loaded
+    if (pendingCount === 0 && masks.length > 0) {
+      const allLoaded = masks.every((m) => {
+        const img = cache.get(m.maskBase64);
+        return img && img.complete;
+      });
+      if (!allLoaded) {
+        // Some images still loading from previous cache, wait for them
+        masks.forEach((m) => {
+          const img = cache.get(m.maskBase64);
+          if (img && !img.complete) {
+            img.onload = () => forceUpdate();
+          }
+        });
+      }
+    }
   }, [masks]);
 
   // Main render loop
@@ -118,25 +153,66 @@ export function ImageCanvas({
 
     // 2. Draw masks
     if (showMasks && masks.length > 0) {
+      console.log(`[ImageCanvas] Drawing ${masks.length} masks, showMasks=${showMasks}`);
       const cache = maskCacheRef.current;
       masks.forEach((m, i) => {
         const maskImg = cache.get(m.maskBase64);
-        if (maskImg && maskImg.complete) {
+        console.log(`[ImageCanvas] Mask ${i}: cached=${!!maskImg}, complete=${maskImg?.complete}, naturalWidth=${maskImg?.naturalWidth}, color=${m.color}`);
+        if (maskImg && maskImg.complete && maskImg.naturalWidth > 0) {
+          // Create offscreen canvas to process the mask
           const offscreen = document.createElement('canvas');
           offscreen.width = canvasWidth;
           offscreen.height = canvasHeight;
           const offCtx = offscreen.getContext('2d');
           if (offCtx) {
+            // Draw mask scaled to canvas size
             offCtx.drawImage(maskImg, 0, 0, canvasWidth, canvasHeight);
-            offCtx.globalCompositeOperation = 'source-in';
-            offCtx.fillStyle = m.color;
-            offCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-            ctx.save();
-            // Highlight hovered mask with higher opacity
-            const isHovered = hoveredMaskIndex === i;
-            ctx.globalAlpha = isHovered ? Math.min(maskOpacity + 0.3, 1) : maskOpacity;
-            ctx.drawImage(offscreen, 0, 0);
-            ctx.restore();
+            
+            // Get mask pixel data
+            const maskData = offCtx.getImageData(0, 0, canvasWidth, canvasHeight);
+            
+            // Create colored overlay using mask as alpha
+            const overlayCanvas = document.createElement('canvas');
+            overlayCanvas.width = canvasWidth;
+            overlayCanvas.height = canvasHeight;
+            const overlayCtx = overlayCanvas.getContext('2d');
+            if (overlayCtx) {
+              // Parse the color
+              const color = m.color;
+              let r = 0, g = 0, b = 0;
+              if (color.startsWith('#')) {
+                r = parseInt(color.slice(1, 3), 16);
+                g = parseInt(color.slice(3, 5), 16);
+                b = parseInt(color.slice(5, 7), 16);
+              } else if (color.startsWith('rgb')) {
+                const match = color.match(/\d+/g);
+                if (match) {
+                  r = parseInt(match[0]);
+                  g = parseInt(match[1]);
+                  b = parseInt(match[2]);
+                }
+              }
+              
+              // Create overlay image data with mask as alpha
+              const overlayData = overlayCtx.createImageData(canvasWidth, canvasHeight);
+              for (let j = 0; j < maskData.data.length; j += 4) {
+                // Use mask's red channel (grayscale) as alpha
+                const maskValue = maskData.data[j]; // R channel of grayscale mask
+                overlayData.data[j] = r;
+                overlayData.data[j + 1] = g;
+                overlayData.data[j + 2] = b;
+                overlayData.data[j + 3] = maskValue; // Use mask value as alpha
+              }
+              
+              overlayCtx.putImageData(overlayData, 0, 0);
+              
+              // Draw overlay with transparency
+              ctx.save();
+              const isHovered = hoveredMaskIndex === i;
+              ctx.globalAlpha = isHovered ? Math.min(maskOpacity + 0.3, 1) : maskOpacity;
+              ctx.drawImage(overlayCanvas, 0, 0);
+              ctx.restore();
+            }
           }
         }
       });
