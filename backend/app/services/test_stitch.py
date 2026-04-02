@@ -44,16 +44,16 @@ class TestFilterAndOffsetResults:
     """Tests for filter_and_offset_results utility function."""
 
     def test_filters_sample_region_boxes(self):
-        """Boxes fully in sample region (x2 <= sample_width) are removed."""
+        """Boxes fully in sample region (center_x <= sample_width) are removed."""
         masks = np.ones((3, 100, 200), dtype=bool)
         boxes = np.array([
-            [10, 10, 50, 50],    # fully in sample (x2=50 <= 80) -> filtered
-            [60, 10, 150, 50],   # spans both -> kept
-            [90, 20, 180, 60],   # fully in target -> kept
+            [10, 10, 50, 50],    # center_x=30 <= 80 -> filtered
+            [60, 10, 150, 50],   # center_x=105 > 80 -> kept
+            [90, 20, 180, 60],   # center_x=135 > 80 -> kept
         ], dtype=np.float32)
         scores = np.array([0.9, 0.8, 0.7])
 
-        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100)
+        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100, 100, 200)
 
         assert len(fm) == 2
         assert len(fb) == 2
@@ -65,7 +65,7 @@ class TestFilterAndOffsetResults:
         boxes = np.array([[90, 20, 180, 60]], dtype=np.float32)
         scores = np.array([0.95])
 
-        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100)
+        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100, 100, 200)
 
         assert fb[0, 0] == pytest.approx(10)   # 90 - 80
         assert fb[0, 1] == pytest.approx(20)   # y unchanged
@@ -81,7 +81,7 @@ class TestFilterAndOffsetResults:
         ], dtype=np.float32)
         scores = np.array([0.8, 0.7])
 
-        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100)
+        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100, 100, 200)
 
         assert fm.shape == (2, 100, 120)
 
@@ -91,21 +91,21 @@ class TestFilterAndOffsetResults:
         boxes = np.empty((0, 4), dtype=np.float32)
         scores = np.empty((0,), dtype=np.float32)
 
-        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100)
+        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100, 100, 200)
 
         assert fm.shape == (0, 100, 120)
         assert fb.shape == (0, 4)
         assert fs.shape == (0,)
 
     def test_all_filtered(self):
-        """When all boxes are in sample region, result is empty."""
+        """When all boxes are in sample region (center_x <= sample_width), result is empty."""
         masks = np.ones((2, 100, 200), dtype=bool)
         boxes = np.array([
-            [10, 10, 50, 50],
-            [20, 20, 70, 70],
+            [10, 10, 50, 50],   # center_x=30 <= 80 -> filtered
+            [20, 20, 70, 70],   # center_x=45 <= 80 -> filtered
         ], dtype=np.float32)
         scores = np.array([0.9, 0.8])
 
-        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100)
+        fm, fb, fs = filter_and_offset_results(masks, boxes, scores, 80, 120, 100, 100, 200)
 
         assert len(fm) == 0

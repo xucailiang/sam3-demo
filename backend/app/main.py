@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .api import segment_router, batch_router
+from .api import segment_router, batch_router, sample_router
 from .models import HealthResponse
 from .services import get_model_manager, initialize_model_manager
 
@@ -74,6 +74,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(segment_router)
 app.include_router(batch_router)
+app.include_router(sample_router)
 
 
 # --- Unified Exception Handlers (Requirements: 6.3, 6.4) ---

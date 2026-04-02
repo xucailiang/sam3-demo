@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { BoxPrompt, BatchProgress, BatchResult } from '../types';
+import type { BoxPrompt, BatchProgress, BatchResult, SegmentationResult, SampleInferResponse } from '../types';
 import {
   batchSegmentWithText as apiBatchText,
   batchSegmentWithStitch as apiBatchStitch,
@@ -15,6 +15,10 @@ export interface UseBatchSegmentationReturn {
     sampleImage: File,
     sampleBox: BoxPrompt,
     confidence?: number,
+  ) => Promise<void>;
+  batchSegmentWithSample: (
+    files: File[],
+    inferFn: (files: File[]) => Promise<SampleInferResponse | null>,
   ) => Promise<void>;
   cancelBatch: () => void;
   clearResults: () => void;
@@ -131,6 +135,79 @@ export function useBatchSegmentation(): UseBatchSegmentationReturn {
     [],
   );
 
+  /**
+   * Batch segmentation using sample-based feature caching.
+   * Requirements: 1.2, 1.4, 5.1, 5.2
+   */
+  const batchSegmentWithSample = useCallback(
+    async (
+      files: File[],
+      inferFn: (files: File[]) => Promise<SampleInferResponse | null>,
+    ) => {
+      cancelledRef.current = false;
+      setIsProcessing(true);
+      setResults([]);
+      setProgress({
+        total: files.length,
+        completed: 0,
+        currentIndex: 0,
+        status: 'processing',
+      });
+
+      try {
+        const response = await inferFn(files);
+
+        if (cancelledRef.current) return;
+
+        if (!response) {
+          throw new Error('Sample inference failed');
+        }
+
+        // Convert SampleInferResponse to BatchResult format
+        const mapped: BatchResult[] = files.map((file, i) => {
+          const inferResult = response.results[i];
+          if (!inferResult || inferResult.error) {
+            return {
+              file,
+              result: null,
+              error: inferResult?.error || 'Inference failed',
+            };
+          }
+          // Convert to SegmentationResult format
+          const segResult: SegmentationResult = {
+            masks: inferResult.masks,
+            count: inferResult.count,
+            processingTimeMs: inferResult.processing_time_ms,
+            imageSize: inferResult.image_size,
+          };
+          return {
+            file,
+            result: segResult,
+            error: null,
+          };
+        });
+
+        setResults(mapped);
+        setProgress({
+          total: files.length,
+          completed: files.length,
+          currentIndex: files.length,
+          status: 'completed',
+        });
+      } catch (err: unknown) {
+        if (cancelledRef.current) return;
+        const message = err instanceof Error ? err.message : 'Batch failed';
+        setResults(
+          files.map((file) => ({ file, result: null, error: message })),
+        );
+        setProgress((prev) => ({ ...prev, status: 'error' }));
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [],
+  );
+
   const cancelBatch = useCallback(() => {
     cancelledRef.current = true;
     setIsProcessing(false);
@@ -148,6 +225,7 @@ export function useBatchSegmentation(): UseBatchSegmentationReturn {
     isProcessing,
     batchSegmentWithText,
     batchSegmentWithStitch,
+    batchSegmentWithSample,
     cancelBatch,
     clearResults,
   };

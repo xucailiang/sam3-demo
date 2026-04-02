@@ -13,14 +13,25 @@ import base64
 import io
 import logging
 import time
-from typing import List, Tuple, Optional
+import uuid
+from typing import List, Tuple, Optional, Dict
 
 import cv2
 import numpy as np
 from PIL import Image
 
-from ..models.schemas import MaskData, SegmentationResult
+from ..models.schemas import (
+    MaskData,
+    SegmentationResult,
+    DefectBox,
+    CachedSample,
+    SampleInferResult,
+    MaskDataWithCategory,
+    BatchSampleInferResult,
+    SampleListItem,
+)
 from .model_manager import SAM3ModelManager, get_model_manager
+from .exceptions import SampleNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +178,355 @@ class SegmentationService:
             model_manager: 模型管理器实例，默认使用全局实例
         """
         self.model_manager = model_manager or get_model_manager()
+        # 样本缓存字典：sample_id -> CachedSample
+        self._sample_cache: Dict[str, "CachedSample"] = {}
+    
+    async def create_sample(
+        self,
+        image: np.ndarray,
+        boxes: List[DefectBox],
+    ) -> Tuple[str, float]:
+        """创建缺陷样本并缓存样品图像
+        
+        缓存样品图像和边界框信息，用于后续拼接推理。
+        
+        Args:
+            image: 样品图像 (H, W, C) RGB 格式
+            boxes: 缺陷边界框列表
+            
+        Returns:
+            Tuple[str, float]: (sample_id, cache_time_ms)
+                - sample_id: 样本唯一标识
+                - cache_time_ms: 缓存耗时（毫秒）
+        """
+        start_time = time.time()
+        sample_id = str(uuid.uuid4())
+        
+        logger.info(f"Creating sample {sample_id} with {len(boxes)} boxes")
+        
+        # 缓存样品图像和边界框
+        self._sample_cache[sample_id] = CachedSample(
+            sample_image=image.copy(),  # 复制图像避免外部修改
+            src_shape=image.shape[:2],  # (height, width)
+            boxes=boxes,
+        )
+        
+        cache_time_ms = (time.time() - start_time) * 1000
+        
+        logger.info(
+            f"Sample {sample_id} created: {len(boxes)} boxes, "
+            f"image shape {image.shape}, {cache_time_ms:.2f}ms"
+        )
+        
+        return sample_id, cache_time_ms
+    
+    def delete_sample(self, sample_id: str) -> bool:
+        """删除样本并释放缓存
+        
+        Args:
+            sample_id: 样本唯一标识
+            
+        Returns:
+            bool: 是否成功删除（True 表示存在并已删除，False 表示不存在）
+        """
+        if sample_id in self._sample_cache:
+            del self._sample_cache[sample_id]
+            logger.info(f"Sample {sample_id} deleted")
+            return True
+        
+        logger.warning(f"Sample {sample_id} not found for deletion")
+        return False
+    
+    def list_samples(self) -> List[SampleListItem]:
+        """列出当前缓存的所有样本
+        
+        Returns:
+            List[SampleListItem]: 样本列表
+        """
+        samples = []
+        for sample_id, cached in self._sample_cache.items():
+            samples.append(SampleListItem(
+                sample_id=sample_id,
+                boxes_count=len(cached.boxes),
+                created_at=cached.created_at,
+            ))
+        
+        logger.info(f"Listed {len(samples)} samples")
+        return samples
+    
+    def _compute_iou(self, box1: List[float], box2: List[float]) -> float:
+        """计算两个边界框的 IoU（交并比）
+        
+        Args:
+            box1: [x1, y1, x2, y2]
+            box2: [x1, y1, x2, y2]
+            
+        Returns:
+            float: IoU 值 (0-1)
+        """
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+        
+        if x2 <= x1 or y2 <= y1:
+            return 0.0
+        
+        intersection = (x2 - x1) * (y2 - y1)
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        union = area1 + area2 - intersection
+        
+        return intersection / union if union > 0 else 0.0
+    
+    def _match_mask_to_box(
+        self, 
+        mask_bbox: List[float], 
+        input_boxes: List[DefectBox],
+        sample_width: int,
+    ) -> Optional[int]:
+        """根据 IoU 匹配 mask 到输入 bbox
+        
+        Args:
+            mask_bbox: mask 的边界框 [x1, y1, x2, y2]（已偏移到目标图坐标）
+            input_boxes: 输入的缺陷边界框列表（样品图坐标）
+            sample_width: 样品图宽度（用于坐标转换）
+            
+        Returns:
+            Optional[int]: 匹配的 bbox 索引，如果没有匹配则返回 None
+        """
+        best_iou = 0.0
+        best_idx = None
+        
+        for idx, box in enumerate(input_boxes):
+            # 输入 bbox 是样品图坐标，需要转换到目标图坐标系
+            # 由于样品图和目标图是拼接的，样品图的 bbox 在拼接图中的位置不变
+            # 但我们比较的是目标图区域的 mask，所以直接比较相对位置
+            input_bbox = box.to_list()
+            iou = self._compute_iou(mask_bbox, input_bbox)
+            if iou > best_iou:
+                best_iou = iou
+                best_idx = idx
+        
+        # 阈值防止误匹配
+        return best_idx if best_iou > 0.1 else None
+    
+    async def infer_with_sample(
+        self,
+        sample_id: str,
+        target_image: np.ndarray,
+        confidence: float = 0.25,
+    ) -> SampleInferResult:
+        """使用缓存样品图对单张目标图进行拼接推理
+        
+        将缓存的样品图与目标图拼接，使用边界框进行分割推理。
+        
+        Args:
+            sample_id: 样本唯一标识
+            target_image: 目标图像 (H, W, C) RGB 格式
+            confidence: 置信度阈值
+            
+        Returns:
+            SampleInferResult: 推理结果（包含类别信息）
+            
+        Raises:
+            SampleNotFoundError: 样本不存在
+        """
+        start_time = time.time()
+        
+        cached = self._sample_cache.get(sample_id)
+        if not cached:
+            raise SampleNotFoundError(sample_id)
+        
+        logger.info(f"Inferring with sample {sample_id} on target image")
+        
+        try:
+            predictor = self.model_manager.get_semantic_predictor()
+            
+            # 临时设置置信度阈值
+            original_conf = predictor.args.conf
+            predictor.args.conf = confidence
+            
+            try:
+                # 拼接样品图和目标图
+                stitched_image, sample_width, target_width = stitch_images(
+                    cached.sample_image, target_image
+                )
+                target_h, target_w = target_image.shape[:2]
+                stitched_h, stitched_w = stitched_image.shape[:2]
+                
+                logger.info(
+                    f"Stitched image: {stitched_h}x{stitched_w}, "
+                    f"sample_width={sample_width}, target_width={target_width}"
+                )
+                
+                # 设置拼接图像
+                predictor.set_image(stitched_image)
+                
+                # 使用缓存的边界框进行推理（边界框在样品图区域）
+                bboxes = [box.to_list() for box in cached.boxes]
+                results = predictor(bboxes=bboxes)
+                
+                # 处理结果
+                masks_data: List[MaskDataWithCategory] = []
+                
+                for r in results:
+                    if r.masks is not None and r.boxes is not None:
+                        # 获取原始数据
+                        masks_np = r.masks.data.cpu().numpy()
+                        boxes_np = r.boxes.xyxy.cpu().numpy()
+                        scores_np = r.boxes.conf.cpu().numpy()
+                        
+                        # 过滤和偏移结果（只保留目标区域的检测）
+                        filtered_masks, filtered_boxes, filtered_scores = filter_and_offset_results(
+                            masks_np,
+                            boxes_np,
+                            scores_np,
+                            sample_width,
+                            target_width,
+                            target_h,
+                            stitched_h,
+                            stitched_w,
+                        )
+                        
+                        logger.info(
+                            f"Filtered {len(masks_np)} -> {len(filtered_masks)} masks"
+                        )
+                        
+                        # 处理每个过滤后的 mask
+                        for i in range(len(filtered_masks)):
+                            mask_np = (filtered_masks[i] * 255).astype(np.uint8)
+                            bbox = filtered_boxes[i].tolist()
+                            score = float(filtered_scores[i])
+                            
+                            # 编码为 Base64 PNG
+                            mask_base64 = self._encode_mask_to_base64(mask_np)
+                            
+                            # 计算掩码面积
+                            area = int(np.sum(mask_np > 0))
+                            
+                            # 使用 IoU 匹配确定类别
+                            matched_idx = self._match_mask_to_box(
+                                bbox, cached.boxes, sample_width
+                            )
+                            category = None
+                            if matched_idx is not None:
+                                category = cached.boxes[matched_idx].category
+                            
+                            masks_data.append(MaskDataWithCategory(
+                                mask_base64=mask_base64,
+                                bbox=bbox,
+                                score=score,
+                                label=category,
+                                area=area,
+                                category=category,
+                            ))
+                
+                processing_time_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    f"Sample inference completed: {len(masks_data)} masks, "
+                    f"{processing_time_ms:.2f}ms"
+                )
+                
+                return SampleInferResult(
+                    masks=masks_data,
+                    count=len(masks_data),
+                    processing_time_ms=processing_time_ms,
+                    image_size=(target_w, target_h),
+                )
+                
+            finally:
+                # 恢复原始置信度
+                predictor.args.conf = original_conf
+                
+        finally:
+            self.model_manager.clear_cache()
+    
+    async def batch_infer_with_sample(
+        self,
+        sample_id: str,
+        target_images: List[np.ndarray],
+        confidence: float = 0.25,
+    ) -> BatchSampleInferResult:
+        """使用缓存样品图批量处理多张目标图
+        
+        将缓存的样品图与每张目标图拼接进行批量分割推理。
+        单张图失败时继续处理其他图片。
+        
+        Args:
+            sample_id: 样本唯一标识
+            target_images: 目标图像列表
+            confidence: 置信度阈值
+            
+        Returns:
+            BatchSampleInferResult: 批量推理结果（包含性能统计）
+            
+        Raises:
+            SampleNotFoundError: 样本不存在
+        """
+        batch_start_time = time.time()
+        
+        cached = self._sample_cache.get(sample_id)
+        if not cached:
+            raise SampleNotFoundError(sample_id)
+        
+        logger.info(
+            f"Batch inferring with sample {sample_id} on {len(target_images)} images"
+        )
+        
+        results: List[SampleInferResult] = []
+        success_count = 0
+        failed_count = 0
+        total_inference_time_ms = 0.0
+        
+        # 样品图缓存节省的是重复上传和解码的时间
+        # 每次上传和解码约需 50ms
+        estimated_upload_time_ms = 50.0
+        sample_cache_saved_ms = estimated_upload_time_ms * len(target_images)
+        
+        for idx, target_image in enumerate(target_images):
+            try:
+                result = await self.infer_with_sample(
+                    sample_id=sample_id,
+                    target_image=target_image,
+                    confidence=confidence,
+                )
+                results.append(result)
+                success_count += 1
+                total_inference_time_ms += result.processing_time_ms
+                
+            except Exception as e:
+                logger.error(
+                    f"Batch inference failed for image {idx}: {e}"
+                )
+                failed_count += 1
+                
+                # 返回空结果
+                height, width = target_image.shape[:2]
+                results.append(SampleInferResult(
+                    masks=[],
+                    count=0,
+                    processing_time_ms=0.0,
+                    image_size=(width, height),
+                ))
+        
+        total_time_ms = (time.time() - batch_start_time) * 1000
+        
+        logger.info(
+            f"Batch inference completed: {success_count}/{len(target_images)} success, "
+            f"{total_time_ms:.2f}ms total, "
+            f"~{sample_cache_saved_ms:.2f}ms saved by sample caching"
+        )
+        
+        return BatchSampleInferResult(
+            results=results,
+            total=len(target_images),
+            success_count=success_count,
+            failed_count=failed_count,
+            total_time_ms=total_time_ms,
+            feature_reuse_saved_ms=sample_cache_saved_ms,
+        )
     
     async def segment_with_text(
         self,

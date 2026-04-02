@@ -14,6 +14,7 @@ from .segmentation_service import (
     get_segmentation_service,
     parse_text_prompts,
 )
+from .exceptions import SampleNotFoundError
 
 __all__ = [
     # Model Manager
@@ -24,4 +25,6 @@ __all__ = [
     "SegmentationService",
     "get_segmentation_service",
     "parse_text_prompts",
+    # Exceptions
+    "SampleNotFoundError",
 ]

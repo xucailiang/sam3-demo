@@ -35,6 +35,8 @@ export interface MaskData {
   label?: string;
   area: number;
   color: string; // display color assigned by frontend
+  /** 缺陷类别标签（样本推理时返回） */
+  category?: string;
 }
 
 /** Segmentation result for a single image */
@@ -122,3 +124,64 @@ export interface BatchSelectionState {
   /** 全局置信度阈值 */
   globalThreshold: number;
 }
+
+// ============================================
+// Multi-BBox Defect Annotation Types
+// ============================================
+
+/** 缺陷边界框（带类别标签） */
+export interface DefectBox {
+  /** 唯一标识 */
+  id: string;
+  /** 左上角 X 坐标 */
+  x1: number;
+  /** 左上角 Y 坐标 */
+  y1: number;
+  /** 右下角 X 坐标 */
+  x2: number;
+  /** 右下角 Y 坐标 */
+  y2: number;
+  /** 缺陷类别标签 */
+  category: string;
+  /** 显示颜色 */
+  color: string;
+}
+
+/** 创建样本响应 */
+export interface CreateSampleResponse {
+  /** 样本唯一标识 */
+  sample_id: string;
+  /** BBox 数量 */
+  boxes_count: number;
+  /** 特征提取耗时（毫秒） */
+  feature_time_ms: number;
+}
+
+/** 单张图片的推理结果 */
+export interface SampleInferResult {
+  /** 分割掩码列表 */
+  masks: MaskData[];
+  /** 检测数量 */
+  count: number;
+  /** 处理时间（毫秒） */
+  processing_time_ms: number;
+  /** 图像尺寸 [宽, 高] */
+  image_size: [number, number];
+  /** 错误信息（如果有） */
+  error?: string;
+}
+
+/** 样本推理响应 */
+export interface SampleInferResponse {
+  /** 推理结果列表 */
+  results: SampleInferResult[];
+  /** 总图片数 */
+  total: number;
+  /** 成功数量 */
+  success_count: number;
+  /** 失败数量 */
+  failed_count: number;
+  /** 总处理时间（毫秒） */
+  total_time_ms: number;
+}
+

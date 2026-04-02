@@ -109,20 +109,31 @@ export async function exportOverlayAsPNG(
 /**
  * Build a plain JSON-serializable object from a SegmentationResult.
  *
- * Includes mask contours (bbox), scores, labels, and metadata.
+ * Includes mask contours (bbox), scores, labels, categories, and metadata.
  * The maskBase64 field is preserved so the data can be round-tripped.
  *
- * Requirements: 9.3
+ * Requirements: 9.3, 6.1
  */
 export function buildExportJSON(result: SegmentationResult): Record<string, unknown> {
+  // Group masks by category for statistics
+  const categoryStats: Record<string, number> = {};
+  for (const m of result.masks) {
+    const cat = m.category ?? '未分类';
+    categoryStats[cat] = (categoryStats[cat] ?? 0) + 1;
+  }
+  
   return {
     count: result.count,
     processingTimeMs: result.processingTimeMs,
     imageSize: result.imageSize,
+    // Category statistics - Requirement 6.1
+    categoryStats,
     masks: result.masks.map((m) => ({
       bbox: m.bbox,
       score: m.score,
       label: m.label ?? null,
+      // Include category in export - Requirement 6.1
+      category: m.category ?? null,
       area: m.area,
       maskBase64: m.maskBase64,
     })),
@@ -152,15 +163,22 @@ import type { BatchResult } from '../types';
  * Export all batch segmentation results as a ZIP file.
  *
  * Each image's results are placed in a subfolder named after the file.
- * Contains the JSON result for each image.
+ * Contains the JSON result for each image with category information.
+ * Includes a summary.json with overall statistics.
  *
- * Requirements: 8.7
+ * Requirements: 8.7, 6.1
  */
 export function exportBatchAsZIP(
   results: BatchResult[],
   filename = 'batch_results.zip',
 ): void {
   const files: Record<string, Uint8Array> = {};
+  
+  // Track overall category statistics
+  const overallCategoryStats: Record<string, number> = {};
+  let totalDetections = 0;
+  let successCount = 0;
+  let failedCount = 0;
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
@@ -168,13 +186,34 @@ export function exportBatchAsZIP(
     const prefix = `${String(i + 1).padStart(3, '0')}_${baseName}`;
 
     if (r.result) {
+      successCount++;
+      totalDetections += r.result.count;
+      
+      // Aggregate category statistics
+      for (const m of r.result.masks) {
+        const cat = m.category ?? '未分类';
+        overallCategoryStats[cat] = (overallCategoryStats[cat] ?? 0) + 1;
+      }
+      
       const jsonData = buildExportJSON(r.result);
       const jsonStr = JSON.stringify(jsonData, null, 2);
       files[`${prefix}/result.json`] = strToU8(jsonStr);
     } else if (r.error) {
+      failedCount++;
       files[`${prefix}/error.txt`] = strToU8(r.error);
     }
   }
+  
+  // Create summary.json with overall statistics - Requirement 6.1
+  const summary = {
+    totalImages: results.length,
+    successCount,
+    failedCount,
+    totalDetections,
+    categoryStats: overallCategoryStats,
+    exportedAt: new Date().toISOString(),
+  };
+  files['summary.json'] = strToU8(JSON.stringify(summary, null, 2));
 
   const zipped = zipSync(files);
   const blob = new Blob([zipped], { type: 'application/zip' });

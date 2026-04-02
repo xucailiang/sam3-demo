@@ -1,10 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
 import './App.css';
-import type { InteractionMode, PointPrompt, BoxPrompt, MaskData, SegmentationResult } from './types';
+import type { InteractionMode, PointPrompt, BoxPrompt, MaskData } from './types';
 import { ImageCanvas } from './components/ImageCanvas';
 import { PromptPanel } from './components/PromptPanel';
 import { ResultPanel } from './components/ResultPanel';
-import { BatchPanel } from './components/BatchPanel';
 import { SampleWorkflow } from './components/SampleWorkflow';
 import { ErrorBanner } from './components/ErrorBanner';
 import { useSegmentation } from './hooks/useSegmentation';
@@ -27,8 +26,8 @@ function App() {
   const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // App mode: single image vs batch vs sample workflow
-  const [appMode, setAppMode] = useState<'sample-workflow' | 'single' | 'batch'>('sample-workflow');
+  // App mode: single image vs sample workflow
+  const [appMode, setAppMode] = useState<'sample-workflow' | 'single'>('sample-workflow');
 
   // Interaction state
   const [mode, setMode] = useState<InteractionMode>('text');
@@ -146,34 +145,16 @@ function App() {
   // Determine if segmentation controls should be enabled
   const canSegment = imageEl !== null;
 
-  // Handle viewing a batch result detail
-  const handleViewBatchResult = useCallback((_batchResult: SegmentationResult, file: File) => {
-    // Switch to single mode and display the result
-    setAppMode('single');
-    setImageFile(file);
-    clearResult();
-
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      setImageEl(img);
-      // We can't directly set the segmentation result via the hook,
-      // so we just load the image for viewing
-    };
-    img.src = url;
-  }, [clearResult]);
-
   return (
     <div className="app">
       <header className="app-header">
         <h1>SAM3 Demo</h1>
         <p>图像分割演示项目</p>
-        {/* Mode tabs: single vs batch */}
+        {/* Mode tabs */}
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem' }}>
           {([
             { key: 'sample-workflow' as const, label: '样品标注工作流' },
             { key: 'single' as const, label: '单图模式' },
-            { key: 'batch' as const, label: '批量模式' },
           ]).map((m) => (
             <button
               key={m.key}
@@ -197,13 +178,8 @@ function App() {
       <div className="app-body">
         {appMode === 'sample-workflow' ? (
           /* Sample workflow mode */
-          <div style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
+          <div style={{ width: '100%' }}>
             <SampleWorkflow />
-          </div>
-        ) : appMode === 'batch' ? (
-          /* Batch mode */
-          <div className="app-sidebar" style={{ width: '100%', maxWidth: 600, margin: '0 auto' }}>
-            <BatchPanel onViewResult={handleViewBatchResult} />
           </div>
         ) : (
         <>
