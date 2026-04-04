@@ -1,0 +1,4 @@
+# file: /home/justin/workspace/cv_paper/sam3-demo/experiments/evaluation.py
+# hypothesis_version: 6.151.10
+
+[0.0, 2.0, 127, 'dice', 'f1', 'iou', 'mean', 'precision', 'recall', 'std']

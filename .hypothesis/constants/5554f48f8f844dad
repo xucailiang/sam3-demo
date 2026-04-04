@@ -1,0 +1,4 @@
+# file: /home/justin/workspace/cv_paper/sam3-demo/experiments/prompt_generator.py
+# hypothesis_version: 6.151.10
+
+['box', 'crack', 'labels', 'points', 'text']

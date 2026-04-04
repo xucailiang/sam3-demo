@@ -237,6 +237,7 @@ class BaselineTrainer:
         model = model.to(self.device)
         criterion = _BCEDiceLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
         best_val_loss = float("inf")
         best_state: Optional[Dict[str, Any]] = None
@@ -277,6 +278,8 @@ class BaselineTrainer:
                     "[%s] Epoch %d/%d  train_loss=%.4f  val_loss=%.4f  best=%.4f",
                     model_name, epoch, epochs, train_loss, val_loss, best_val_loss,
                 )
+
+            scheduler.step()
 
         # Restore best weights
         if best_state is not None:
@@ -384,7 +387,7 @@ class BaselineTrainer:
         test_ds = dataset.get_split("test")
         rows: List[Dict[str, Any]] = []
 
-        is_yolo = hasattr(model, "predict")
+        is_yolo = hasattr(model, "predict") and hasattr(model, "task")
 
         for idx in range(len(test_ds)):
             image_id = f"{dataset.dataset_name}_{idx:04d}"

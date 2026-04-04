@@ -1,0 +1,4 @@
+# file: /home/justin/workspace/cv_paper/sam3-demo/backend/app/services/ampf_engine.py
+# hypothesis_version: 6.151.10
+
+[0.0, 0.05, 0.1, 0.25, 0.35, 0.4, 0.5, 1.0, 4.0, 255.0, 255, 'Box mode failed', 'Point mode failed', 'Text mode failed', 'box', 'break', 'crack', 'fissure', 'fracture', 'labels', 'point', 'points', 'text']

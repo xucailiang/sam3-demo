@@ -251,9 +251,11 @@ class AMPFEngine:
             if best_iou_box >= threshold:
                 ai.box_candidate = best_box
 
-            # --- point: direct i-th correspondence ---
+            # --- point: direct i-th correspondence with IoU check ---
             if i < len(point_candidates):
-                ai.point_candidate = point_candidates[i]
+                pt_iou = self._compute_iou(gt_inst, point_candidates[i].mask)
+                if pt_iou >= threshold:
+                    ai.point_candidate = point_candidates[i]
 
             aligned.append(ai)
 
@@ -520,7 +522,17 @@ class AMPFEngine:
 
         # Combine per-instance fused masks via logical OR
         if not fused_masks:
-            return np.zeros((h, w), dtype=np.uint8)
+            # Image-level fallback: no instance matched any candidate.
+            # Pick the single candidate with the highest detection score
+            # across all modes as a reasonable default.
+            best_cand = max(all_candidates, key=lambda c: c.detection_score)
+            logger.info(
+                "No instance-level matches — fallback to best candidate "
+                "(mode=%s, score=%.3f)",
+                best_cand.mode,
+                best_cand.detection_score,
+            )
+            return best_cand.mask
 
         combined = np.zeros((h, w), dtype=np.uint8)
         for fm in fused_masks:
