@@ -24,6 +24,7 @@ frontend/dist/
 
 # Testing
 .pytest_cache/
+.hypothesis/
 coverage/
 .coverage
 htmlcov/
@@ -42,6 +43,10 @@ models/
 
 # Runtime outputs
 backend/runs/
+runs/
+experiments/results/
+experiments/visualizations/
+experiments/datasets/
 
 # Environment variables
 .env

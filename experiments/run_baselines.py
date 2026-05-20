@@ -200,11 +200,14 @@ class BaselineTrainer:
     Supports U-Net (smp), DeepLabV3+ (smp), and YOLOv8n-seg (ultralytics).
     """
 
-    def __init__(self, device: Optional[str] = None) -> None:
+    def __init__(self, device: Optional[str] = None, seed: int = 42) -> None:
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = device
+        self.seed = seed
+        torch.manual_seed(seed)
+        np.random.seed(seed)
         logger.info("BaselineTrainer using device: %s", self.device)
 
     # ------------------------------------------------------------------
@@ -222,13 +225,21 @@ class BaselineTrainer:
     ) -> nn.Module:
         """Train an smp model with BCE+Dice loss and Adam optimiser.
 
-        Uses dataset.get_split() for train/val. Saves best model by val loss.
+        Uses dataset.get_split() for train/val. Saves best model by validation
+        loss. The test split is not used for model selection.
         """
         train_ds = dataset.get_split("train")
-        val_ds = dataset.get_split("test")
+        val_ds = dataset.get_split("val")
+
+        generator = torch.Generator()
+        generator.manual_seed(self.seed)
 
         train_loader = DataLoader(
-            _CrackTorchDataset(train_ds), batch_size=batch_size, shuffle=True, num_workers=0
+            _CrackTorchDataset(train_ds),
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=0,
+            generator=generator,
         )
         val_loader = DataLoader(
             _CrackTorchDataset(val_ds), batch_size=batch_size, shuffle=False, num_workers=0
@@ -337,7 +348,7 @@ class BaselineTrainer:
         from ultralytics import YOLO
 
         train_ds = dataset.get_split("train")
-        val_ds = dataset.get_split("test")
+        val_ds = dataset.get_split("val")
 
         tmp_dir = tempfile.mkdtemp(prefix="yolo_crack_")
         try:
@@ -404,6 +415,7 @@ class BaselineTrainer:
                         "image_id": image_id,
                         "method": model_name,
                         "dataset": dataset.dataset_name,
+                        "protocol": "supervised_train_val_test",
                         **metrics,
                     }
                 )
@@ -482,7 +494,7 @@ class BaselineTrainer:
 # ---------------------------------------------------------------------------
 
 def run_all_baselines(
-    datasets: Dict[str, CrackDataset], device: Optional[str] = None
+    datasets: Dict[str, CrackDataset], device: Optional[str] = None, seed: int = 42
 ) -> pd.DataFrame:
     """Train and evaluate all 3 baseline models on all provided datasets.
 
@@ -493,7 +505,7 @@ def run_all_baselines(
     Returns:
         Combined DataFrame with per-image metrics for every model × dataset.
     """
-    trainer = BaselineTrainer(device=device)
+    trainer = BaselineTrainer(device=device, seed=seed)
     all_frames: List[pd.DataFrame] = []
 
     for ds_name, dataset in datasets.items():
@@ -529,7 +541,10 @@ def run_all_baselines(
         combined = pd.concat(all_frames, ignore_index=True)
     else:
         combined = pd.DataFrame(
-            columns=["image_id", "method", "dataset", "iou", "dice", "precision", "recall", "f1"]
+            columns=[
+                "image_id", "method", "dataset", "protocol",
+                "iou", "dice", "precision", "recall", "f1",
+            ]
         )
 
     # Save combined results
@@ -596,7 +611,7 @@ if __name__ == "__main__":
     # Print summary
     if not results.empty:
         metrics = ["iou", "dice", "precision", "recall", "f1"]
-        summary = results.groupby(["method", "dataset"])[metrics].mean()
+        summary = results.groupby(["method", "dataset", "protocol"])[metrics].mean()
         print("\n" + "=" * 72)
         print("  Baseline Summary (mean metrics)")
         print("=" * 72)

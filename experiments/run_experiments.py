@@ -41,6 +41,10 @@ logger = logging.getLogger(__name__)
 RESULTS_DIR = _SCRIPT_DIR / "results"
 VIS_DIR = _SCRIPT_DIR / "visualizations"
 
+PROTOCOL_TEXT_ONLY = "automatic_text_prompt"
+PROTOCOL_ORACLE_PROMPT = "oracle_gt_prompt"
+PROTOCOL_ORACLE_ALIGNMENT = "oracle_gt_prompt_gt_alignment"
+
 
 # ---------------------------------------------------------------------------
 # ExperimentRunner — core framework (Task 7.1)
@@ -101,6 +105,11 @@ class ExperimentRunner:
                         "image_id": image_id,
                         "method": mode,
                         "dataset": dataset.dataset_name,
+                        "protocol": (
+                            PROTOCOL_TEXT_ONLY
+                            if mode == "text"
+                            else PROTOCOL_ORACLE_PROMPT
+                        ),
                         **metrics,
                     }
                 )
@@ -192,7 +201,10 @@ class ExperimentRunner:
             return
 
         metrics = ["iou", "dice", "precision", "recall", "f1"]
-        summary = df.groupby(["method", "dataset"])[metrics].mean()
+        group_cols = ["method", "dataset"]
+        if "protocol" in df.columns:
+            group_cols.append("protocol")
+        summary = df.groupby(group_cols)[metrics].mean()
         print("\n" + "=" * 72)
         print("  Experiment Summary (mean metrics)")
         print("=" * 72)
@@ -225,6 +237,7 @@ class ExperimentRunner:
                         "image_id": image_id,
                         "method": "ampf",
                         "dataset": dataset.dataset_name,
+                        "protocol": PROTOCOL_ORACLE_ALIGNMENT,
                         **metrics,
                     }
                 )
@@ -282,6 +295,7 @@ class ExperimentRunner:
                         "image_id": image_id,
                         "method": method_name,
                         "dataset": dataset.dataset_name,
+                        "protocol": PROTOCOL_ORACLE_ALIGNMENT,
                         **metrics,
                     }
                 )
@@ -496,6 +510,7 @@ class ExperimentRunner:
                         "image_id": image_id,
                         "method": method_name,
                         "dataset": dataset.dataset_name,
+                        "protocol": PROTOCOL_ORACLE_ALIGNMENT,
                         **metrics,
                     }
                 )
@@ -596,20 +611,27 @@ class ExperimentRunner:
         """
         all_results: List[pd.DataFrame] = []
 
+        eval_datasets: Dict[str, CrackDataset] = {}
+
         for ds_name, ds in datasets.items():
-            logger.info("=== Dataset: %s (%d images) ===", ds_name, len(ds))
+            eval_ds = ds.get_split("test")
+            eval_datasets[ds_name] = eval_ds
+            logger.info(
+                "=== Dataset: %s test split (%d images of %d total) ===",
+                ds_name, len(eval_ds), len(ds),
+            )
 
             # --- Single-mode baselines (6 groups) ---
             for mode in ("text", "box", "point"):
                 logger.info("Running single-mode: %s on %s", mode, ds_name)
-                df = await self.run_single_mode(ds, mode)
+                df = await self.run_single_mode(eval_ds, mode)
                 self.save_results(df, f"{ds_name}_{mode}.csv")
                 self.print_summary(df)
                 all_results.append(df)
 
             # --- AMPF full pipeline (2 groups) ---
             logger.info("Running AMPF on %s", ds_name)
-            df = await self.run_ampf(ds)
+            df = await self.run_ampf(eval_ds)
             self.save_results(df, f"{ds_name}_ampf.csv")
             self.print_summary(df)
             all_results.append(df)
@@ -617,7 +639,7 @@ class ExperimentRunner:
             # --- Ablation studies (12 groups) ---
             for abl in self.ABLATION_TYPES:
                 logger.info("Running ablation '%s' on %s", abl, ds_name)
-                df = await self.run_ablation(ds, abl)
+                df = await self.run_ablation(eval_ds, abl)
                 self.save_results(df, f"{ds_name}_ablation_{abl}.csv")
                 self.print_summary(df)
                 all_results.append(df)
@@ -632,7 +654,7 @@ class ExperimentRunner:
                 logger.info(
                     "Running combination %s on %s", combo_name, ds_name
                 )
-                df = await self.run_mode_combination(ds, combo)
+                df = await self.run_mode_combination(eval_ds, combo)
                 self.save_results(df, f"{ds_name}_combo_{combo_name}.csv")
                 self.print_summary(df)
                 all_results.append(df)
@@ -659,7 +681,7 @@ class ExperimentRunner:
             self.print_summary(combined)
 
             # Generate visualizations
-            for ds_name, ds in datasets.items():
+            for ds_name, ds in eval_datasets.items():
                 self.generate_visualizations(combined, ds)
 
 

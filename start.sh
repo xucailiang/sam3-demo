@@ -17,15 +17,15 @@ trap cleanup EXIT INT TERM
 # ---------- 后端 ----------
 echo "▶ 启动后端 (http://localhost:8000) ..."
 
-if [ ! -d "$ROOT_DIR/backend/.venv" ]; then
-  echo "  创建虚拟环境..."
-  uv venv "$ROOT_DIR/backend/.venv"
+if [ ! -d "$ROOT_DIR/.venv" ]; then
+  echo "  创建 Python 3.12 虚拟环境..."
+  uv venv --python 3.12 "$ROOT_DIR/.venv"
 fi
 
 (
   cd "$ROOT_DIR/backend"
-  source .venv/bin/activate
-  uv pip install -q -r requirements.txt
+  source "$ROOT_DIR/.venv/bin/activate"
+  uv pip install -q -r "$ROOT_DIR/requirements-experiments.txt"
   # 禁用 Ultralytics 运行时自动 pip install（避免调用系统 pip 报错）
   export YOLO_AUTOINSTALL=false
   # 指定 SAM3 模型文件路径（通过 huggingface-cli download facebook/sam3 下载）

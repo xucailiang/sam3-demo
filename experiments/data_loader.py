@@ -128,18 +128,19 @@ class CrackDataset:
         return ((label > 127).astype(np.uint8)) * 255
 
     def get_split(self, split: str) -> "CrackDataset":
-        """Return train or test subset.
+        """Return train, validation, or test subset.
 
-        CrackForest: 80/20 random split with fixed seed=42.
-        DeepCrack: Uses existing train/test directory structure.
+        CrackForest: 60/20/20 random split with fixed seed=42.
+        DeepCrack: Uses the official test directory as test, and splits the
+        official train directory into 80/20 train/validation subsets.
 
         Args:
-            split: "train" or "test"
+            split: "train", "val", or "test"
         Returns:
             A new CrackDataset containing only the split's samples.
         """
-        if split not in ("train", "test"):
-            raise ValueError(f"split must be 'train' or 'test', got '{split}'")
+        if split not in ("train", "val", "test"):
+            raise ValueError(f"split must be 'train', 'val', or 'test', got '{split}'")
 
         new_ds = object.__new__(CrackDataset)
         new_ds.dataset_name = self.dataset_name
@@ -148,18 +149,39 @@ class CrackDataset:
         if self.dataset_name == "crackforest":
             rng = np.random.RandomState(42)
             indices = rng.permutation(len(self._samples))
-            split_idx = int(len(self._samples) * 0.8)
+            train_end = int(len(self._samples) * 0.6)
+            val_end = int(len(self._samples) * 0.8)
             if split == "train":
-                new_ds._samples = [self._samples[i] for i in indices[:split_idx]]
+                selected = indices[:train_end]
+            elif split == "val":
+                selected = indices[train_end:val_end]
             else:
-                new_ds._samples = [self._samples[i] for i in indices[split_idx:]]
+                selected = indices[val_end:]
+            new_ds._samples = [self._samples[i] for i in selected]
         else:
-            # DeepCrack: filter by directory name
+            # DeepCrack: official train/test split; carve validation from train.
             base = self.root_dir / "dataset" / "DeepCrack"
-            split_dir = str(base / f"{split}_img")
-            new_ds._samples = [
+            train_dir = str(base / "train_img")
+            test_dir = str(base / "test_img")
+
+            if split == "test":
+                new_ds._samples = [
+                    (img, gt) for img, gt in self._samples
+                    if img.startswith(test_dir)
+                ]
+                return new_ds
+
+            train_samples = [
                 (img, gt) for img, gt in self._samples
-                if img.startswith(split_dir)
+                if img.startswith(train_dir)
             ]
+            rng = np.random.RandomState(42)
+            indices = rng.permutation(len(train_samples))
+            train_end = int(len(train_samples) * 0.8)
+            if split == "train":
+                selected = indices[:train_end]
+            else:
+                selected = indices[train_end:]
+            new_ds._samples = [train_samples[i] for i in selected]
 
         return new_ds

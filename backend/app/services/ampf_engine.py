@@ -73,6 +73,7 @@ class AMPFConfig:
     )
     box_perturb_pct: float = 0.05
     point_perturb_px: int = 3
+    random_seed: int = 42
     # Post-processing
     morph_kernel_size: int = 3
 
@@ -91,6 +92,7 @@ class AMPFEngine:
     ):
         self.seg = segmentation_service
         self.config = config or AMPFConfig()
+        self._rng = random.Random(self.config.random_seed)
 
     # ------------------------------------------------------------------
     # Utility
@@ -265,10 +267,40 @@ class AMPFEngine:
     # Stage 3: Confidence-Aware Fusion (Task 3.5)
     # ------------------------------------------------------------------
 
-    def compute_boundary_score(self, mask: np.ndarray) -> float:
-        """Sobel gradient magnitude along mask boundary, normalised to [0, 1]."""
+    def compute_boundary_score(
+        self, mask: np.ndarray, image: Optional[np.ndarray] = None
+    ) -> float:
+        """Image-gradient strength around the predicted mask boundary.
+
+        When *image* is provided, this score measures how strongly the predicted
+        mask boundary aligns with local image gradients. Without *image*, it
+        falls back to a mask-contour sharpness proxy for backward compatibility.
+        """
         if np.count_nonzero(mask) == 0:
             return 0.0
+
+        if image is not None:
+            if image.ndim == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = image.copy()
+
+            gray_f = gray.astype(np.float32)
+            gx = cv2.Sobel(gray_f, cv2.CV_32F, 1, 0, ksize=3)
+            gy = cv2.Sobel(gray_f, cv2.CV_32F, 0, 1, ksize=3)
+            mag = np.sqrt(gx ** 2 + gy ** 2)
+
+            binary = (mask > 0).astype(np.uint8)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            boundary_band = cv2.morphologyEx(binary, cv2.MORPH_GRADIENT, kernel)
+            boundary = cv2.dilate(boundary_band, kernel, iterations=1) > 0
+            if not np.any(boundary):
+                return 0.0
+
+            normalizer = float(np.percentile(mag, 95))
+            if normalizer <= 1e-6:
+                return 0.0
+            return min(max(float(np.mean(mag[boundary]) / normalizer), 0.0), 1.0)
 
         m = mask.astype(np.float32) / 255.0
         gx = cv2.Sobel(m, cv2.CV_32F, 1, 0, ksize=3)
@@ -357,25 +389,23 @@ class AMPFEngine:
 
     # --- perturbation helpers ---
 
-    @staticmethod
-    def _perturb_bbox(bbox: List[float], pct: float) -> List[float]:
+    def _perturb_bbox(self, bbox: List[float], pct: float) -> List[float]:
         """Perturb each bbox coordinate by a random amount in [-pct, +pct]."""
         x1, y1, x2, y2 = bbox
         w = x2 - x1
         h = y2 - y1
-        dx = w * random.uniform(-pct, pct)
-        dy = h * random.uniform(-pct, pct)
+        dx = w * self._rng.uniform(-pct, pct)
+        dy = h * self._rng.uniform(-pct, pct)
         return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]
 
-    @staticmethod
     def _perturb_point(
-        pt: Tuple[float, float], px: int
+        self, pt: Tuple[float, float], px: int
     ) -> Tuple[float, float]:
         """Offset point by a random amount in [-px, +px] for each axis."""
         x, y = pt
         return (
-            x + random.uniform(-px, px),
-            y + random.uniform(-px, px),
+            x + self._rng.uniform(-px, px),
+            y + self._rng.uniform(-px, px),
         )
 
     async def compute_composite_confidence(
@@ -385,7 +415,7 @@ class AMPFEngine:
         cfg = self.config
         s_det = candidate.detection_score
         s_stab = await self.compute_stability_score(image, candidate)
-        s_bound = self.compute_boundary_score(candidate.mask)
+        s_bound = self.compute_boundary_score(candidate.mask, image)
         return cfg.alpha * s_det + cfg.beta * s_stab + cfg.gamma * s_bound
 
     def fuse_instance(
