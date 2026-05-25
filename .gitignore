@@ -12,6 +12,7 @@ venv/
 *.egg-info/
 dist/
 
+*.pt
 # Build outputs
 frontend/dist/
 *.tsbuildinfo

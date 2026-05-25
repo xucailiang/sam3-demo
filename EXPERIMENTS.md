@@ -41,10 +41,12 @@
 
 | 协议 | 含义 | 使用场景 |
 |------|------|---------|
-| `automatic_text_prompt` | 使用固定文本 "crack, fracture, fissure, break" | Text 单模式 |
+| `automatic_text_prompt` | 使用固定文本 "crack" | Text 单模式 |
 | `oracle_gt_prompt` | 从 GT mask 生成 box/point prompt | Box/Point 单模式 |
 | `oracle_gt_prompt_gt_alignment` | Oracle prompt + 实例级 GT 对齐 | AMPF, Ablation, Mode Combo |
 | `supervised_train_val_test` | 全监督训练 (train/val/test 三集) | U-Net, DeepLabV3+, YOLOv8-seg |
+
+> **注**: Text 单模式 baseline 使用固定 prompt `"crack"`。同义词 `"fracture"`, `"fissure"`, `"break"` 仅在 AMPF 的 text-prompt stability scoring 中使用，不用于 text single-mode baseline。
 
 ### 3.2 13 组实验（每数据集）
 
@@ -64,12 +66,12 @@
 | 12 | `combo_text+point` | oracle_gt_prompt_gt_alignment | 双模态：Text+Point |
 | 13 | `combo_box+point` | oracle_gt_prompt_gt_alignment | 双模态：Box+Point |
 
-### 3.3 监督基线（100 epochs, AdamW, lr=1e-4）
+### 3.3 监督基线（U-Net/DeepLabV3+: 50 epochs, Adam, lr=1e-4; YOLOv8-seg: 100 epochs）
 
 | 方法 | 架构 | 参数量 |
 |------|------|--------|
-| U-Net | SMP (EfficientNet-b0 backbone) | ~5.7M |
-| DeepLabV3+ | SMP (ResNet-50 backbone) | ~26.7M |
+| U-Net | SMP (ResNet-34 backbone, ImageNet pretrained) | ~24M |
+| DeepLabV3+ | SMP (ResNet-34 backbone, ImageNet pretrained) | ~27M |
 | YOLOv8-seg | Ultralytics YOLOv8n-seg | ~3.3M |
 
 ---
@@ -78,7 +80,7 @@
 
 ### 4.1 主结果 — 单模式 vs AMPF
 
-| 方法 | CrackForest mIoU | CrackForest Dice | DeepCrack mIoU | DeepCrack Dice |
+| 方法 | CrackForest IoU | CrackForest Dice | DeepCrack IoU | DeepCrack Dice |
 |------|-----------------|-----------------|----------------|----------------|
 | **Text** | **0.4355** | 0.6000 | **0.6658** | 0.7866 |
 | Box | 0.3439 | 0.4786 | 0.5408 | 0.6441 |
@@ -89,7 +91,7 @@
 
 ### 4.2 消融实验 — AMPF 组件贡献
 
-| 消融 | CrackForest mIoU | DeepCrack mIoU | vs AMPF (DC) |
+| 消融 | CrackForest IoU | DeepCrack IoU | vs AMPF (DC) |
 |------|-----------------|----------------|-------------|
 | AMPF (full) | 0.4249 | 0.6645 | — |
 | w/o S_det | 0.4352 | 0.6702 | +0.0057 |
@@ -106,7 +108,7 @@
 
 ### 4.3 双模态组合 vs 三模态 AMPF
 
-| 方法 | CrackForest mIoU | DeepCrack mIoU |
+| 方法 | CrackForest IoU | DeepCrack IoU |
 |------|-----------------|----------------|
 | Text | 0.4355 | 0.6658 |
 | Box+Text | 0.4281 | 0.6658 |
@@ -118,7 +120,7 @@
 
 ### 4.4 零训练 vs 全监督
 
-| 方法 | CrackForest mIoU | DeepCrack mIoU | 训练需求 |
+| 方法 | CrackForest IoU | DeepCrack IoU | 训练需求 |
 |------|-----------------|----------------|---------|
 | Text (zero-training) | 0.4355 | 0.6658 | 无 |
 | AMPF (zero-training) | 0.4249 | 0.6645 | 无 |
@@ -129,9 +131,9 @@
 
 **发现：** DeepCrack 上 Text (0.666) > U-Net (0.643)；CrackForest 上 U-Net (0.458) 略胜 Text (0.436)。
 
-### 4.5 DeepCrack 完整结果总表（237 张，各组均含 mIoU/Dice/Precision/Recall/F1）
+### 4.5 DeepCrack 完整结果总表（237 张，各组均含 IoU/Dice/Precision/Recall/F1）
 
-| 方法 | mIoU | Dice | Precision | Recall | F1 |
+| 方法 | IoU | Dice | Precision | Recall | F1 |
 |------|------|------|-----------|--------|-----|
 | text | 0.6658 | 0.7866 | 0.7441 | 0.8854 | 0.7866 |
 | box | 0.5408 | 0.6441 | 0.6603 | 0.7516 | 0.6441 |
@@ -173,12 +175,12 @@
 
 ## 6. 核心发现
 
-1. **Text alone 就够了**：DeepCrack 上 Text mIoU=0.666，超越全监督 U-Net (0.643)；AMPF 相对 Text 的边际改善为负或零
-2. **Alignment 是瓶颈**：去掉实例级对齐后，mIoU 下降 25-33%（CrackForest: 0.425→0.329, DeepCrack: 0.665→0.442）
+1. **Text alone 就够了**：DeepCrack 上 Text IoU=0.666，超越全监督 U-Net (0.643)；AMPF 相对 Text 的边际改善为负或零
+2. **Alignment 是瓶颈**：去掉实例级对齐后，IoU 下降 25-33%（CrackForest: 0.425→0.329, DeepCrack: 0.665→0.442）
 3. **简单融合 > 复杂加权**：等权平均 (`fusion=mean`) 在两个数据集均优于置信度加权 AMPF
-4. **Point 不适合裂缝**：Point 单模态 mIoU 仅 0.117/0.313，且加入任何融合组合都会降低性能
+4. **Point 不适合裂缝**：Point 单模态 IoU 仅 0.117/0.313，且加入任何融合组合都会降低性能（注：centroid-derived point protocol 下；更强的 point protocol 可能得到不同结论）
 5. **Precision-Recall 权衡**：AMPF 提升 Precision（0.744→0.812 on DC），但降低 Recall（0.885→0.811）——融合引入假阴性
-6. **零训练潜力**：无需任何裂缝标注数据即可获得与 100-epoch 监督训练相当的 mIoU
+6. **零训练潜力**：无需任何裂缝标注数据即可获得与监督训练相当的 IoU
 
 ---
 
