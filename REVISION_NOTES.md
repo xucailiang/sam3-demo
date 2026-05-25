@@ -87,6 +87,7 @@
 ---
 
 ## 5. Text Prompt 描述统一
+6. 路径引用修正
 
 ### 问题
 - `EXPERIMENTS.md` protocol 表写 text prompt = "crack, fracture, fissure, break"
@@ -99,6 +100,24 @@
 
 ### 影响
 纯文档修正。
+
+---
+
+## 6. Data and Code Availability 路径修正
+
+### 问题
+- 论文引用 `sam3-demo/backend/...`、`sam3-demo/experiments/...` 路径
+- 实际项目根目录就是 `sam3-demo/`，不存在嵌套的 `sam3-demo/` 子目录
+- `sam3-demo/experiments/` 目录实际不存在
+- 测试文件只存在于 `experiments/` 下，没有 mirror
+
+### 修正
+- `sam3-demo/backend/app/services/...` → `backend/app/services/...`
+- 移除 "mirrored under sam3-demo/experiments/" 描述
+- 移除不存在的 `sam3-demo/experiments/tests/...` 测试路径引用
+
+### 影响
+纯路径修正，无代码变更。
 
 ---
 
