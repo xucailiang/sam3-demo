@@ -43,11 +43,11 @@ pnpm-debug.log*
 models/
 
 # Runtime outputs
-backend/runs/
-runs/
-experiments/results/
-experiments/visualizations/
-experiments/datasets/
+# backend/runs/
+# runs/
+# experiments/results/
+# experiments/visualizations/
+# experiments/datasets/
 
 # Environment variables
 .env

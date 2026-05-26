@@ -1,0 +1,83 @@
+% Table 1: Main comparison (nearest-foreground point protocol)
+\begin{table}[ht]
+\centering
+\caption{Foreground IoU and Dice on CrackForest and DeepCrack.}
+\begin{tabular}{lrrrr}
+\toprule
+Method & CrackForest IoU & CrackForest Dice & DeepCrack IoU & DeepCrack Dice \\
+\midrule
+Text & \textbf{0.4355} & \textbf{0.6000} & 0.6658 & 0.7866 \\
+Box & 0.3439 & 0.4786 & 0.5408 & 0.6441 \\
+Point (nearest-fg) & 0.3014 & 0.4332 & 0.5199 & 0.6278 \\
+AMPF & 0.4145 & 0.5737 & \textbf{0.6671} & \textbf{0.7880} \\
+Text + Box & 0.4282 & 0.5865 & 0.6654 & 0.7860 \\
+Text + Point & 0.3972 & 0.5580 & 0.6435 & 0.7688 \\
+Box + Point & 0.4012 & 0.5557 & 0.6466 & 0.7645 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Table 2: Ablation study
+\begin{table}[ht]
+\centering
+\caption{Ablation study of AMPF components and fusion rules.}
+\begin{tabular}{lrrrr}
+\toprule
+Configuration & CrackForest IoU & CrackForest Dice & DeepCrack IoU & DeepCrack Dice \\
+\midrule
+AMPF & 0.4145 & 0.5737 & 0.6671 & 0.7880 \\
+w/o $S_{det}$ & 0.4087 & 0.5668 & 0.6639 & 0.7844 \\
+w/o $S_{stab}$ & 0.4279 & 0.5848 & 0.6691 & 0.7894 \\
+w/o $S_{bnd}$ & 0.4122 & 0.5718 & 0.6605 & 0.7825 \\
+w/o alignment & 0.3506 & 0.4847 & 0.4676 & 0.5489 \\
+fusion = max & 0.4084 & 0.5699 & 0.6746 & 0.7936 \\
+fusion = mean & \textbf{0.4587} & \textbf{0.6192} & \textbf{0.6815} & \textbf{0.8012} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Table 3: Comparison with supervised baselines
+\begin{table}[ht]
+\centering
+\caption{Training-free SAM3 vs. supervised baselines.}
+\begin{tabular}{lrrrr}
+\toprule
+Method & CrackForest IoU & CrackForest Dice & DeepCrack IoU & DeepCrack Dice \\
+\midrule
+Text & 0.4355 & 0.6000 & 0.6658 & 0.7866 \\
+AMPF & 0.4145 & 0.5737 & 0.6671 & 0.7880 \\
+fusion = mean & \textbf{0.4587} & 0.6192 & \textbf{0.6815} & \textbf{0.8012} \\
+U-Net & 0.4576 & \textbf{0.6236} & 0.6661 & 0.7855 \\
+DeepLabV3+ & 0.4384 & 0.6004 & 0.6698 & 0.7906 \\
+YOLOv8-seg & 0.3069 & 0.4533 & 0.4198 & 0.5652 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Table 4: DeepCrack full results (nearest-foreground point)
+\begin{table}[ht]
+\centering
+\caption{Complete DeepCrack results.}
+\begin{tabular}{lrrrrr}
+\toprule
+Method & IoU & Dice & Precision & Recall & F1 \\
+\midrule
+Text & 0.6658 & 0.7866 & 0.7441 & 0.8854 & 0.7866 \\
+Box & 0.5408 & 0.6441 & 0.6603 & 0.7516 & 0.6441 \\
+Point (nearest-fg) & 0.5199 & 0.6278 & 0.6229 & 0.7754 & 0.6278 \\
+AMPF & 0.6671 & 0.7880 & 0.8126 & 0.8105 & 0.7880 \\
+w/o $S_{det}$ & 0.6639 & 0.7844 & 0.8126 & 0.8076 & 0.7844 \\
+w/o $S_{stab}$ & 0.6691 & 0.7894 & 0.8149 & 0.8122 & 0.7894 \\
+w/o $S_{bnd}$ & 0.6605 & 0.7825 & 0.8055 & 0.8097 & 0.7825 \\
+w/o alignment & 0.4676 & 0.5489 & 0.6690 & 0.5436 & 0.5489 \\
+fusion = max & 0.6746 & 0.7936 & 0.7640 & 0.8799 & 0.7936 \\
+fusion = mean & 0.6815 & 0.8012 & 0.8126 & 0.8332 & 0.8012 \\
+Text + Box & 0.6654 & 0.7860 & 0.8178 & 0.8027 & 0.7860 \\
+Text + Point & 0.6435 & 0.7688 & 0.7864 & 0.8134 & 0.7688 \\
+Box + Point & 0.6466 & 0.7645 & 0.8079 & 0.7812 & 0.7645 \\
+U-Net & 0.6661 & 0.7855 & 0.8122 & 0.8042 & 0.7855 \\
+DeepLabV3+ & 0.6698 & 0.7906 & 0.8351 & 0.7815 & 0.7906 \\
+YOLOv8-seg & 0.4198 & 0.5652 & 0.6124 & 0.5457 & 0.5652 \\
+\bottomrule
+\end{tabular}
+\end{table}

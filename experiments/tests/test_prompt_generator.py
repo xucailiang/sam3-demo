@@ -138,3 +138,153 @@ def test_generate_all_prompts():
     assert result["text"] == "crack"
     assert result["box"] is not None
     assert len(result["points"]) == 1
+
+
+# --- Deterministic tests: concave crack structures ---
+
+
+def _old_centroid_method(gt_mask):
+    """Replicate original centroid-only behavior for regression testing."""
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        gt_mask, connectivity=8
+    )
+    points = []
+    for i in range(1, num_labels):
+        cx, cy = centroids[i]
+        points.append((float(cx), float(cy)))
+    return points
+
+
+def test_foreground_point_on_u_shape():
+    """U-shaped crack: geometric centroid falls in the hollow center (bg).
+
+    Old centroid method would return a point on background. The nearest-fg
+    fallback must select a crack pixel.
+    """
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    # Draw a U shape: two vertical bars + bottom bar, 3px thickness
+    cv2.line(mask, (20, 20), (20, 70), 255, 3)  # left vertical
+    cv2.line(mask, (20, 70), (60, 70), 255, 3)  # bottom horizontal
+    cv2.line(mask, (60, 70), (60, 20), 255, 3)  # right vertical
+
+    # 1. Old centroid method returns a background point
+    old_points = _old_centroid_method(mask)
+    assert len(old_points) == 1
+    old_x, old_y = int(round(old_points[0][0])), int(round(old_points[0][1]))
+    assert mask[old_y, old_x] == 0, (
+        f"U-shape centroid should be on background, but ({old_x},{old_y}) is fg"
+    )
+
+    # 2. New method guarantees a foreground point
+    new_points, _ = PromptGenerator.generate_point_prompts(mask)
+    assert len(new_points) == 1
+    new_x, new_y = int(round(new_points[0][0])), int(round(new_points[0][1]))
+    assert mask[new_y, new_x] == 255, (
+        f"Nearest-fg point ({new_x},{new_y}) should be on foreground"
+    )
+
+    # 3. New point belongs to the same connected component
+    num_labels, labels = cv2.connectedComponents(mask, connectivity=8)[:2]
+    old_label = labels[old_y, old_x] if (0 <= old_y < 100 and 0 <= old_x < 100) else 0
+    new_label = labels[new_y, new_x]
+    assert new_label != 0, "Point should be on a foreground component"
+    assert old_label == 0, "Centroid should be background"
+    assert new_label == 1, "Point should be on the only crack component"
+
+
+def test_foreground_point_on_c_ring():
+    """C-shaped thin ring (nearly closed ellipse): centroid falls in interior bg.
+
+    A thin crack forming a C shape is common in surface spalling imagery.
+    The geometric centroid is in the hollow interior.
+    """
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    # Thin ring: ellipse arc from 30° to 330°, 2px thickness
+    cv2.ellipse(mask, (50, 50), (25, 25), 0, 30, 330, 255, 2)
+
+    old_points = _old_centroid_method(mask)
+    assert len(old_points) >= 1, "Should have at least one crack component"
+
+    new_points, _ = PromptGenerator.generate_point_prompts(mask)
+    assert len(new_points) == len(old_points)
+
+    # Each new point must be on foreground
+    num_labels, labels = cv2.connectedComponents(mask, connectivity=8)[:2]
+    for i, (px, py) in enumerate(new_points):
+        ix, iy = int(round(px)), int(round(py))
+        assert mask[iy, ix] == 255, (
+            f"C-ring point {i} at ({ix},{iy}) not on foreground"
+        )
+        assert labels[iy, ix] == i + 1, (
+            f"C-ring point {i} component mismatch: expected {i+1}, got {labels[iy, ix]}"
+        )
+
+
+def test_foreground_point_on_multi_component_mix():
+    """One blob (centroid on fg) + one U-shape (centroid on bg).
+
+    The nearest-fg fallback should only activate for the component where the
+    centroid is off-foreground.
+    """
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    # Blob: centroid on fg
+    cv2.circle(mask, (75, 25), 6, 255, -1)
+    # U-shape: centroid on bg
+    cv2.line(mask, (10, 50), (10, 90), 255, 3)
+    cv2.line(mask, (10, 90), (40, 90), 255, 3)
+    cv2.line(mask, (40, 90), (40, 50), 255, 3)
+
+    old_points = _old_centroid_method(mask)
+    assert len(old_points) == 2
+
+    new_points, _ = PromptGenerator.generate_point_prompts(mask)
+    assert len(new_points) == 2
+
+    num_labels, labels = cv2.connectedComponents(mask, connectivity=8)[:2]
+    # Both new points must be on foreground
+    for i, (px, py) in enumerate(new_points):
+        ix, iy = int(round(px)), int(round(py))
+        assert mask[iy, ix] == 255, (
+            f"Mixed point {i} at ({ix},{iy}) not on foreground"
+        )
+        assert labels[iy, ix] == i + 1, (
+            f"Mixed point {i} component mismatch"
+        )
+
+    # At least one old centroid should be on background (the U-shape one)
+    old_has_bg = False
+    for ox, oy in old_points:
+        oix, oiy = int(round(ox)), int(round(oy))
+        if mask[oiy, oix] == 0:
+            old_has_bg = True
+            break
+    assert old_has_bg, "At least one old centroid should fall on background"
+
+
+def test_nearest_fg_is_closest_pixel():
+    """On a U-shape, the nearest-fg point should be closer to the centroid
+    than any other foreground pixel in the same component.
+    """
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    cv2.line(mask, (20, 20), (20, 70), 255, 3)
+    cv2.line(mask, (20, 70), (60, 70), 255, 3)
+    cv2.line(mask, (60, 70), (60, 20), 255, 3)
+
+    _, labels, _, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    cx, cy = centroids[1]  # geometric centroid of the U
+
+    new_points, _ = PromptGenerator.generate_point_prompts(mask)
+    nx, ny = new_points[0]
+    nearest_dist = (nx - cx) ** 2 + (ny - cy) ** 2
+
+    # Enumerate all foreground pixels in this component, verify none is closer
+    component_mask = (labels == 1).astype(np.uint8)
+    fg_coords = cv2.findNonZero(component_mask)
+    for pt in fg_coords.squeeze(1):
+        px, py = pt[0], pt[1]
+        dist = (px - cx) ** 2 + (py - cy) ** 2
+        assert dist + 1e-6 >= nearest_dist, (
+            f"Found pixel ({px},{py}) closer to centroid ({cx:.1f},{cy:.1f})"
+            f" than nearest-fg point ({nx:.0f},{ny:.0f})"
+            f"  (dist={dist:.1f} vs nearest={nearest_dist:.1f})"
+        )

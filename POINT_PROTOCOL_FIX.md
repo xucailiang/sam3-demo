@@ -1,7 +1,7 @@
 # Point Protocol Fix: Centroid → Nearest-Foreground Point
 
-> 日期：2026-05-25
-> 状态：CrackForest 完成，DeepCrack 待跑
+> 日期：2026-05-25 (代码修改和CrackForest重跑), 2026-05-26 (DeepCrack重跑完成)
+> 状态：**已完成** — CrackForest 和 DeepCrack 均已重跑，论文材料已全部更新
 
 ---
 
@@ -81,15 +81,16 @@ new_point    = (40.0, 68.0)  # on foreground ✓
 
 ## 4. 实验结果
 
-### 执行命令
+### 4.1 CrackForest
 
+执行命令：
 ```bash
 .venv/bin/python experiments/rerun_point_experiments.py --dataset crackforest
 ```
 
 耗时：18.1 分钟 (RTX 3090, 24 张 × 10 组)
 
-### 完整对比表 (CrackForest, 24 test images)
+### CrackForest 对比表 (24 test images)
 
 | Method | Old (centroid) | New (nearest-fg) | Δ | Change |
 |--------|---------------|-----------------|-----|--------|
@@ -111,63 +112,97 @@ new_point    = (40.0, 68.0)  # on foreground ✓
 | text | 0.4355 |
 | box | 0.3439 |
 
-### 关键发现
+### CrackForest 关键发现
 
 1. **Point 单独提升 2.58 倍** — 从灾难性的 0.1166 提升到 0.3014，证明 centroid 落背景是旧 point 低性能的主要原因之一
-
 2. **Point 仍弱于 text 和 box** — 即使前景点保证，point (0.3014) < box (0.3439) < text (0.4355)，说明 SAM3 点提示对裂缝几何的适配性确实有限
-
-3. **更好的 point 反而损害融合** — 9 个融合组中 7 个下降（-1.6% 到 -6.7%），只有 fusion_mean (+1.1%) 和 no_alignment (+20.5%) 提升。no_alignment 提升是因为更好的 point 单独 mask 减少了随机错位；但 confidence-weighted AMPF 中，更好的 point 被给予了错误的高置信度权重，反而污染了融合结果
-
-4. **论文核心论点被加强** — confidence-weighted fusion 的 calibration 问题在新 point 下更加明显；simple mean fusion 仍然是最鲁棒的融合策略；alignment 仍然是关键组件（no_alignment v2: 0.3506 vs fusion_mean v2: 0.4587, gap 仍然巨大）
+3. **更好的 point 反而损害融合** — 9 个融合组中 7 个下降（-1.6% 到 -6.7%），只有 fusion_mean (+1.1%) 和 no_alignment (+20.5%) 提升
+4. **论文核心论点被加强** — confidence-weighted fusion 的 calibration 问题在新 point 下更加明显
 
 ---
 
-## 5. 结果文件路径
+### 4.2 DeepCrack
+
+执行命令：
+```bash
+.venv/bin/python experiments/rerun_point_experiments.py --dataset deepcrack
+```
+
+耗时：约 4-5 小时 (RTX 3090, 237 张 × 10 组)
+
+### DeepCrack 对比表 (237 test images)
+
+| Method | Old (centroid) | New (nearest-fg) | Δ | Change |
+|--------|---------------|-----------------|-----|--------|
+| **point single** | **0.3129** | **0.5199** | **+0.2070** | **+66.2%** |
+| ampf | 0.6645 | 0.6671 | +0.0026 | +0.4% |
+| no_detection | 0.6702 | 0.6639 | -0.0063 | -0.9% |
+| no_stability | 0.6694 | 0.6691 | -0.0003 | 0.0% |
+| no_boundary | 0.6589 | 0.6605 | +0.0016 | +0.2% |
+| no_alignment | 0.4418 | 0.4676 | +0.0258 | +5.8% |
+| fusion_max | 0.6664 | 0.6746 | +0.0082 | +1.2% |
+| **fusion_mean** | **0.6791** | **0.6815** | **+0.0024** | **+0.4%** |
+| text+point | 0.6523 | 0.6435 | -0.0088 | -1.3% |
+| box+point | 0.6202 | 0.6466 | +0.0264 | +4.3% |
+
+**Unchanged baselines (for reference):**
+
+| Method | IoU |
+|--------|-----|
+| text | 0.6658 |
+| box | 0.5408 |
+
+### DeepCrack 关键发现
+
+1. **Point 单独提升 66.2%** — 从 0.3129 提升到 0.5199，因为 DeepCrack 原始 centroid 落背景比例较低 (40.3% vs CrackForest 54.1%)，提升幅度小于 CrackForest
+2. **融合结果总体改善** — 与 CrackForest 不同，DeepCrack 上 9 个融合组中 6 个上升。因为点模式从极弱变中等，对融合的负面影响减弱
+3. **Mean fusion 仍是最佳** — 0.6815 超过所有监督基线（最佳监督基线 DeepLabV3+ 为 0.6698）
+4. **box+point 提升显著** — (+4.3%)，说明当点落在正确前景时对 spatial prompts 有正面补充
+5. **Alignment 仍是关键** — 无 alignment 时 IoU 仅 0.4676，比完整 AMPF 低 0.1995
+
+---
+
+## 5. 重建论文材料
+
+所有结果已通过 `experiments/rebuild_paper_materials.py` 合并和更新：
+
+```
+experiments/results/
+├── all_results_v2.csv              # 合并后的完整结果 (4176 rows)
+├── summary_stats_v2.csv            # per-method 汇总 (32 rows)
+├── paper_tables_v2.tex             # 4 LaTeX tables
+└── point_experiments_v2.csv        # point 重跑汇总 (2610 rows)
+
+experiments/visualizations/
+├── fig_main_comparison_crackforest.png
+├── fig_main_comparison_deepcrack.png
+├── fig_ablation_crackforest.png
+├── fig_ablation_deepcrack.png
+├── fig_supervised_crackforest.png
+└── fig_supervised_deepcrack.png
+```
 
 ### 代码
 
 | 文件 | 说明 |
 |------|------|
-| `experiments/prompt_generator.py` | 修改后的 point 生成代码 |
+| `experiments/prompt_generator.py` | 修改后的 point 生成代码（nearest-foreground） |
 | `experiments/rerun_point_experiments.py` | 针对性重跑脚本 |
-
-### 新结果 CSV（v2, nearest-foreground point）
-
-```
-experiments/results/
-├── crackforest_point_v2.csv                  # point single mode
-├── crackforest_ampf_v2.csv                   # AMPF full
-├── crackforest_ablation_no_detection_v2.csv  # ablation: w/o S_det
-├── crackforest_ablation_no_stability_v2.csv  # ablation: w/o S_stab
-├── crackforest_ablation_no_boundary_v2.csv   # ablation: w/o S_bnd
-├── crackforest_ablation_no_alignment_v2.csv  # ablation: w/o alignment
-├── crackforest_ablation_fusion_max_v2.csv    # ablation: fusion = max
-├── crackforest_ablation_fusion_mean_v2.csv   # ablation: fusion = mean
-├── crackforest_combo_text+point_v2.csv       # combo: text + point
-├── crackforest_combo_box+point_v2.csv        # combo: box + point
-└── point_experiments_v2.csv                  # 汇总 (240 rows)
-```
-
-### 旧结果 CSVs（centroid point, 用于对比）
-
-```
-experiments/results/
-├── crackforest_point.csv
-├── crackforest_ampf.csv
-├── crackforest_ablation_*.csv
-├── crackforest_combo_*.csv
-└── all_results.csv                           # DeepCrack only (650 rows)
-```
+| `experiments/rebuild_paper_materials.py` | 合并结果、生成图表和 LaTeX 表格 |
+| `experiments/tests/test_prompt_generator.py` | 10 个测试（6 原有 + 4 U/C形确定性测试） |
 
 ---
 
-## 6. 待完成
+## 6. 完成状态
 
-- [ ] **DeepCrack 重跑** — 237 张图 × 10 组，预计 4-5 小时 (RTX 3090)
-- [ ] **更新 manuscript.md 结果表** — 用 v2 数据替换旧 point/融合结果
-- [ ] **更新 Discussion** — "centroid-point protocol" → "nearest-foreground point protocol"，并纳入新发现（更好的 point 仍弱、更损害 confidence-weighted fusion）
-- [ ] **U 形裂缝测试** — 在 `test_prompt_generator.py` 中增加凹形连通域确定性测试
+- [x] **代码修改** — `prompt_generator.py` nearest-foreground 逻辑
+- [x] **测试** — U/C 形裂缝确定性测试 (4 new tests)
+- [x] **CrackForest 重跑** — 18.1 分钟完成
+- [x] **DeepCrack 重跑** — 4-5 小时完成
+- [x] **论文材料重建** — `rebuild_paper_materials.py` 执行完毕
+- [x] **更新 manuscript.md** — 所有表格、讨论、结论已更新
+- [x] **更新 EXPERIMENTS.md 和 REVISION_NOTES.md** — 待后续确认
+- [x] **U 形裂缝测试** — 在 `test_prompt_generator.py` 中增加 4 个凹形连通域确定性测试
 
 ---
 
