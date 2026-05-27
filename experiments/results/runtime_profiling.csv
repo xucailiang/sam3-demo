@@ -1,0 +1,6 @@
+method,dataset,protocol,protocol_type,n_images,total_time_s,mean_ms_per_image,std_ms_per_image,mean_iou
+text,deepcrack,automatic_text_prompt,deployable,20,1.6851598499993088,84.25799249996544,7.752374677521645,0.6803465380974001
+box,deepcrack,oracle_gt_prompt,gt-derived diagnostic,20,1.4977481900004932,74.88740950002466,0.9093828220208375,0.369857697210639
+point,deepcrack,oracle_gt_prompt,gt-derived diagnostic,20,59.8162717859991,2990.8135892999553,4570.920947698481,0.28542128186502735
+ampf,deepcrack,oracle_gt_prompt_gt_alignment,gt-assisted diagnostic,20,177.32425735100009,8866.212867550008,9097.72480146736,0.5294747838126386
+ablation_fusion_mean,deepcrack,oracle_gt_prompt_gt_alignment,gt-assisted diagnostic,20,64.96075503500106,3248.037751750053,4693.03683938141,0.562860335966876

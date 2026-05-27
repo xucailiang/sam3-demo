@@ -271,11 +271,13 @@ These results reinforce the central claim for the evaluated visible surface-crac
 
 On DeepCrack, no significant paired IoU difference is observed between automatic text prompting and the reference U-Net or DeepLabV3+ baselines. This is the main practical result. Mean fusion achieves the highest IoU, but it is not directly comparable as a deployable method because it uses GT-assisted prompting and alignment. On CrackForest, U-Net has the strongest supervised result, but the test set contains only 24 images, so this comparison should be treated cautiously.
 
-### 5.7 Qualitative Analysis
+### 5.7 Qualitative Failure Mode Analysis
 
-Quantitative tables alone do not show how each prompt mode fails on thin crack geometries. A qualitative comparison panel should therefore accompany the final submission. The panel should include representative test images with seven columns: original image, ground truth, text prompt, box prompt, point prompt, AMPF, and mean fusion. The corresponding generation script is provided as `experiments/generate_qualitative_figure.py` and saves the panel to `experiments/visualizations/fig_qualitative_prompt_examples.png` when the datasets and SAM3 checkpoint are available.
+![Figure 4. Qualitative failure mode analysis across SAM3 prompt modes and fusion strategies.](experiments/visualizations/fig_qualitative_failure_modes.png)
 
-The qualitative figure should be selected to illustrate four phenomena observed in the metrics. First, text prompting often captures most of the crack region, explaining its high recall, but may also include crack-like background texture. Second, point prompting tends to recover local regions around each positive point and can miss long crack branches. Third, confidence-weighted AMPF can suppress false positives but may introduce false negatives, consistent with the precision increase and recall decrease on DeepCrack. Fourth, mean fusion can recover complementary mask regions under GT-assisted alignment, but this improvement should be shown with the protocol caveat that the prompts and instance correspondence are not automatic.
+**Figure 4.** Qualitative failure mode analysis for four representative DeepCrack test images. Columns: original image, ground truth, text prompt, box prompt, point prompt, AMPF, and mean fusion. Masks are overlaid in color. AMPF and Mean Fusion use GT-assisted alignment and are diagnostic protocols; they are not shown as deployable alternatives. Row 1 (image 168): text over-segmentation. Text prompt achieves high recall (0.971) at low precision (0.266), capturing the crack region but also including background texture, shadows, and surface markings. Row 2 (image 86): point local recovery failure. Single-point prompts recover only local regions around each positive point and miss long linear crack branches; Point IoU is 0.000 versus Text IoU of 0.814. Row 3 (image 17): AMPF false negatives. Confidence-weighted AMPF suppresses background false positives but also suppresses true crack regions, reducing recall from 0.813 (Text) to 0.238 (AMPF) while foreground IoU drops from 0.724 to 0.232. Row 4 (image 178): mean fusion complementary recovery. Under GT-assisted instance alignment, simple mean fusion recovers complementary mask regions from multiple prompt modes, improving IoU from 0.493 (Text) to 0.857.
+
+The four rows illustrate failure and success modes that are consistent with the quantitative trends in Sections 5.1-5.4. Text prompting is a strong high-recall baseline, but its low precision on images with complex surface texture and crack-like artifacts motivates post-processing or human review in screening workflows. Point prompting is structurally limited for elongated cracks under the one-point-per-component protocol; its diagnostic value lies in showing what local SAM3 masks look like, not in providing a deployable segmentation. AMPF's confidence-weighted filtering trades recall for precision without reliably improving foreground IoU, consistent with the ablation finding that the current confidence weights are not tuned for crack segmentation. Mean fusion demonstrates that aligned multi-prompt information contains complementary signal, but the result is protocol-constrained: both the prompts and the instance correspondence require ground truth. The qualitative comparison script is provided as `experiments/generate_qualitative_figure.py`.
 
 ## 6. Discussion
 
@@ -344,7 +346,8 @@ The manuscript is based on the project implementation and result files. The prim
 - `experiments/results/all_results_v2.csv`
 - `experiments/results/summary_stats_v2.csv`
 - `experiments/results/paper_tables_v2.tex`
-- `experiments/visualizations/`
+- `experiments/visualizations/fig_qualitative_failure_modes.png`
+- `experiments/visualizations/fig_qualitative_failure_modes.pdf`
 
 The main implementation files are:
 
@@ -359,8 +362,9 @@ The main implementation files are:
 - `experiments/plot_iou_distribution.py`
 - `experiments/plot_precision_recall.py`
 - `experiments/generate_qualitative_figure.py`
+- `experiments/find_representative_cases.py`
 
-For peer review, the experiment code, result CSV files, table-generation script, figure-generation scripts, and qualitative-figure script are supplied as supplementary material. If the SAM3 weights cannot be redistributed with the replication package, the package should include instructions for obtaining the checkpoint through the official model release or the Ultralytics interface.
+For peer review, the experiment code, result CSV files, table-generation script, figure-generation scripts, qualitative-figure script, and case-selection script are supplied as supplementary material. If the SAM3 weights cannot be redistributed with the replication package, the package should include instructions for obtaining the checkpoint through the official model release or the Ultralytics interface.
 
 ## Author Contributions
 

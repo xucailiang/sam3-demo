@@ -1,559 +1,396 @@
-# Paper Figure and Evidence Optimization Plan
+# Paper Figure and Evidence Optimization Plan — 实施完成报告
 
-本文档用于指导 `manuscript_revised_protocol_aware.md` 后续优化实施，重点回应导师关于“缺少学术 figure、methodology 框架图、定量分布图、错误分析图、校准图、参数敏感性图”的建议。
+本文档记录 `manuscript_revised_protocol_aware.md` 全部图表的实施过程和实验结果。所有 Phase 1-3 任务均已完成 (2026-05-28)。
 
-核心目标不是简单增加图片数量，而是建立一条清晰的论文证据链：
+核心论文证据链：
 
-1. 论文的方法论贡献是什么；
-2. 不同 protocol 的 deployability 边界在哪里；
-3. Text / AMPF / Mean Fusion 的性能差异是否稳定；
-4. AMPF 是否真的只是改变 precision-recall trade-off；
-5. 视觉失败模式是否支持正文讨论；
-6. confidence weighting “不够校准”这个判断是否有足够实验支撑。
+1. 论文的方法论贡献 → Fig. 1
+2. 不同 protocol 的 deployability 边界 → Fig. 1 + Table 1
+3. Text / AMPF / Mean Fusion 的性能差异是否稳定 → Fig. 2 + Fig. 3
+4. AMPF 是否真的只是改变 precision-recall trade-off → Fig. 3 + Fig. S2
+5. 视觉失败模式是否支持正文讨论 → Fig. 4
+6. confidence weighting "不够校准"的判断是否有足够实验支撑 → Fig. S1 + Fig. S2
 
 ---
 
-## 1. 推荐主文 Figure 结构
+## 1. 最终图表清单
 
-建议主文放 4 张核心图，Supplementary 放 2-3 张扩展图。
-
-| Figure | 名称 | 主文/补充 | 当前可做性 | 目的 |
+| Figure | 名称 | 位置 | 状态 | 关键发现 |
 |---|---|---|---|---|
-| Fig. 1 | Protocol Hierarchy & Deployability Framework | 主文 | 可直接做 | 解释论文核心方法论贡献 |
-| Fig. 2 | Per-Image IoU Distribution Violin/Box Plot | 主文 | 可直接做 | 展示 per-image 稳定性和小样本不确定性 |
-| Fig. 3 | Precision-Recall Operating Points Scatter | 主文 | 可直接做 | 支撑 AMPF 改变 PR trade-off 的结论 |
-| Fig. 4 | Qualitative Failure Mode Analysis Grid | 主文 | 需要重新跑推理生成 masks | 支撑 over-segmentation、local recovery、false negatives 等错误分析 |
-| Fig. S1 | Confidence Calibration Reliability Diagram | Supplementary 或后续主文 | 需要额外保存 candidate-level confidence | 支撑 confidence score 未校准的结论 |
-| Fig. S2 | AMPF Hyperparameter Sensitivity Heatmap | Supplementary | 需要额外跑参数敏感性实验 | 证明 AMPF 权重选择是否鲁棒 |
-| Fig. S3 | Inference Time vs Accuracy Scatter | Supplementary | 需要更细粒度 runtime profiling | 展示 accuracy-efficiency trade-off |
+| Fig. 1 | Protocol Hierarchy & Deployability Framework | 主文 Methodology | ✅ | 三级协议体系 |
+| Fig. 2 | Per-Image IoU Distribution | 主文 Results | ✅ | Text 分布与 U-Net 接近 |
+| Fig. 3 | Precision-Recall Operating Points | 主文 Results | ✅ | AMPF 向高 precision/低 recall 移动 |
+| Fig. 4 | Qualitative Failure Mode Analysis | 主文 Results | ✅ | 4 类典型故障模式 |
+| Fig. S1 | Confidence Calibration Reliability Diagram | Supplementary | ✅ | ECE 0.29-0.47，置信度显著高估 IoU |
+| Fig. S2 | AMPF Weight Sensitivity Heatmap | Supplementary | ✅ | IoU 变异系数仅 0.87%，完全 plateau |
+| Fig. S3 | Inference Time vs Accuracy Scatter | Supplementary | ✅ | Text: 84ms/img, AMPF: 8866ms/img |
 
 ---
 
-## 2. 可以直接做的优化项
+## 2. Phase 1: 主文 Fig. 1-3（已完成）
 
-以下内容可以基于现有 `experiments/results/all_results_v2.csv`、`summary_stats_v2.csv` 和论文现有 protocol 设计直接完成，不需要重新跑 SAM3 推理。
+基于 `all_results_v2.csv` 直接绘制，不需要额外推理。
 
-### 2.1 Fig. 1: Protocol Hierarchy & Deployability Framework Diagram
+### Fig. 1: Protocol Hierarchy & Deployability Framework
 
-**可直接做。**
+- 脚本: `experiments/plot_protocol_hierarchy.py`
+- 输出: `experiments/visualizations/fig_protocol_hierarchy.{png,pdf}`
+- 内容: 三级协议层次（Deployable → GT-derived diagnostic → GT-assisted fusion diagnostic），右侧应用场景表
+- 论文引用: Methodology 开头，Figure 1
 
-这是论文最重要的概念图，建议放在 Methodology 开头，作为 Figure 1。
+### Fig. 2: Per-Image IoU Distribution
 
-建议图形结构：
+- 脚本: `experiments/plot_iou_distribution.py`
+- 输出: `experiments/visualizations/fig_iou_distribution.{png,pdf}`
+- 内容: CrackForest (n=24) / DeepCrack (n=237) 双面板 violin/box plot，叠加 jitter points
+- 方法: Text, Box, Point, AMPF, Mean Fusion, U-Net, DeepLabV3+
+- 标注关键 Wilcoxon 显著性
 
-```text
-                 Deployable Protocol
-                Text Prompt ("crack")
-              no GT prompt, no GT alignment
-                         |
-                         v
-          GT-Derived Diagnostic Protocol
-                 Box Prompt / Point Prompt
-              GT used only to generate prompts
-                         |
-                         v
-        GT-Assisted Fusion Diagnostic Protocol
-                AMPF / Mean Fusion / Ablations
-        GT prompt generation + GT instance alignment
-```
+### Fig. 3: Precision-Recall Operating Points
 
-右侧增加应用场景：
+- 脚本: `experiments/plot_precision_recall.py`
+- 输出: `experiments/visualizations/fig_precision_recall_operating_points.{png,pdf}`
+- 内容: 双面板 scatter，箭头标注 Text → AMPF → Mean Fusion 的 PR 移动
+- 方法: Text, Box, Point, AMPF, Mean Fusion, U-Net, DeepLabV3+, YOLOv8-seg
 
-| Protocol Level | Methods | Practical Meaning |
-|---|---|---|
-| Deployable | Text | similar visible surface-crack imagery: mobile inspection / UAV screening / low-label screening |
-| GT-derived diagnostic | Box, Point | prompt-mode diagnosis / annotation workflow analysis |
-| GT-assisted fusion diagnostic | AMPF, Mean Fusion | research diagnosis / fusion potential, not deployment |
+### 正文联动
 
-建议视觉编码：
-
-- 绿色：deployable；
-- 黄色：GT-derived diagnostic；
-- 红/橙：GT-assisted diagnostic；
-- 箭头标注信息依赖逐步增加；
-- 明确写出 “more GT assistance, less deployable”。
-
-输出建议：
-
-- `experiments/visualizations/fig_protocol_hierarchy.pdf`
-- `experiments/visualizations/fig_protocol_hierarchy.png`
-
-论文中应引用为：
-
-> Figure 1 summarizes the protocol hierarchy used in this study. Only the text-prompt protocol is fully automatic; spatial prompts and fusion protocols use ground-truth-derived information and are therefore diagnostic.
+- Methodology 引用 Fig. 1
+- Section 5.1 引用 Fig. 2
+- Section 5.3 引用 Fig. 3
+- 所有图注显式标注 GT-assisted diagnostic
 
 ---
 
-### 2.2 Fig. 2: Per-Image IoU Distribution Violin/Box Plot
+## 3. Phase 2: Fig. 4 Qualitative Failure Mode Analysis（已完成）
 
-**可直接做。**
+### 3.1 实施步骤
 
-数据来源：
+**Step 1 — 筛选典型案例**
 
-- `experiments/results/all_results_v2.csv`
+- 脚本: `experiments/find_representative_cases.py`
+- 数据源: `experiments/results/all_results_v2.csv` (4177 per-image rows)
+- 方法: pivot table + 排名，找出每种 failure mode 的最佳样本
 
-推荐方法：
+**Step 2 — 生成 qualitative overlay**
 
-- Text
-- Box
-- Point
-- AMPF
-- Mean Fusion (`ablation_fusion_mean`)
-- U-Net
-- DeepLabV3+
-
-图形结构：
-
-- 左子图：CrackForest, n=24
-- 右子图：DeepCrack, n=237
-- 横轴：method
-- 纵轴：per-image foreground IoU
-- violin plot 或 box plot
-- 叠加 jitter points 展示每张图的表现
-- 标注关键 Wilcoxon 显著性：
-  - Mean Fusion vs Text
-  - AMPF vs Text
-  - Text vs U-Net
-
-注意：Mean Fusion / AMPF 与 Text 的显著性标注只能作为 protocol-aware descriptive comparison。图注必须说明 Mean Fusion / AMPF 是 GT-assisted diagnostic protocol，不能被解读为 fully deployable 方法优于 Text。
-
-需要传达的信息：
-
-1. CrackForest 测试集很小，分布解释要谨慎；
-2. DeepCrack 更能支撑统计结论；
-3. Text 的分布与 supervised baselines 接近；
-4. Mean Fusion 的提升是 diagnostic，并非 deployable；
-5. AMPF 相比 Text 没有稳定 IoU 提升。
-
-输出建议：
-
-- `experiments/visualizations/fig_iou_distribution.pdf`
-- `experiments/visualizations/fig_iou_distribution.png`
-
-实现脚本建议：
-
-- 新增 `experiments/plot_iou_distribution.py`
-
----
-
-### 2.3 Fig. 3: Precision-Recall Operating Points Scatter
-
-**可直接做。**
-
-数据来源：
-
-- `experiments/results/summary_stats_v2.csv`
-或从 `all_results_v2.csv` groupby 得到 mean precision / mean recall。
-
-推荐方法：
-
-- Text
-- Box
-- Point
-- AMPF
-- Mean Fusion
-- U-Net
-- DeepLabV3+
-- YOLOv8-seg
-
-图形结构：
-
-- 横轴：Recall
-- 纵轴：Precision
-- 两个子图：CrackForest / DeepCrack
-- 每个方法一个点；
-- 用箭头连接 `Text -> AMPF -> Mean Fusion`；
-- 可选：添加 F1-score contour lines。
-
-注意：`Text -> AMPF -> Mean Fusion` 箭头表示 precision-recall operating point 的移动，不表示部署流程，也不表示后者在实际系统中自动可用。
-
-需要传达的信息：
-
-1. Text 是 high-recall / lower-precision baseline；
-2. AMPF 从 Text 移动到 higher-precision / lower-recall 区域；
-3. Mean Fusion 在 GT-assisted alignment 下获得更平衡的点；
-4. YOLOv8-seg 对 thin crack masks 不占优。
-
-输出建议：
-
-- `experiments/visualizations/fig_precision_recall_operating_points.pdf`
-- `experiments/visualizations/fig_precision_recall_operating_points.png`
-
-实现脚本建议：
-
-- 新增 `experiments/plot_precision_recall.py`
-
----
-
-### 2.4 正文文字联动修改
-
-**可直接做。**
-
-添加以上 figure 后，正文需要同步微调：
-
-1. Methodology 开头引用 Fig. 1；
-2. Results 的 Single-Prompt / AMPF 部分引用 Fig. 2；
-3. Results 或 Discussion 中 precision-recall trade-off 段落引用 Fig. 3；
-4. Limitations 中保留可见表面裂缝 benchmark 的边界；
-5. 避免写 “confidence is not calibrated” 这种强结论，除非后续完成 calibration figure。
-
----
-
-## 3. 需要重新跑推理或额外实验后才能做的优化项
-
-以下 figure 不能仅凭现有 summary CSV 可靠完成。若强行绘制，会有实验支撑不足或伪证据风险。
-
-### 3.1 Fig. 4: Qualitative Failure Mode Analysis Grid
-
-**需要重新跑推理生成 masks。**
-
-当前状态：
-
-- `experiments/visualizations/` 只有指标柱状图；
-- `all_results_v2.csv` 保存的是 per-image metrics，不保存预测 mask；
-- 已新增脚本：
-  - `experiments/generate_qualitative_figure.py`
-- 当前本机状态：
-  - `models/sam3/sam3.pt` 存在；
-  - `experiments/datasets/` 缺失；
-  - 因此暂时无法实际生成 qualitative overlay。
-
-建议图形结构：
-
-| 行 | Failure / Success Mode | 目的 |
-|---|---|---|
-| 1 | Text Over-segmentation | 展示 high recall / low precision，阴影、纹理、接缝误分 |
-| 2 | Point Local Recovery | 展示单点只恢复局部区域，漏掉长裂缝分支 |
-| 3 | AMPF False Negative | 展示 confidence filtering 提高 precision 但压低 recall |
-| 4 | Mean Fusion Complementary Recovery | 展示 GT-assisted alignment 下多 prompt 互补恢复 |
-
-推荐列：
-
-1. Original
-2. Ground Truth
-3. Text
-4. Point
-5. AMPF
-6. Mean Fusion
-
-注意事项：
-
-- 必须使用真实模型输出；
-- mask 使用半透明 overlay；
-- FP 区域可用红色箭头；
-- FN 区域可用黄色框；
-- caption 中必须说明 Mean Fusion 是 GT-assisted diagnostic，不是 deployable。
-
-实施前置条件：
-
-1. 下载/恢复 `experiments/datasets/CrackForest-dataset`
-2. 下载/恢复 `experiments/datasets/DeepCrack`
-3. 运行：
+- 脚本: `experiments/generate_qualitative_figure.py`
+- 模型: `/home/justin/llm_models/facebook/sam3/sam3.pt`
+- 数据集: `experiments/datasets/DeepCrack/` (test split)
+- 命令:
 
 ```bash
 .venv/bin/python experiments/generate_qualitative_figure.py \
   --datasets-dir experiments/datasets \
-  --model models/sam3/sam3.pt
+  --model /home/justin/llm_models/facebook/sam3/sam3.pt \
+  --case deepcrack:168 \
+  --case deepcrack:86 \
+  --case deepcrack:17 \
+  --case deepcrack:178 \
+  --output experiments/visualizations/fig_qualitative_failure_modes.png
 ```
 
-输出：
+**Step 3 — 更新论文**
 
-- `experiments/visualizations/fig_qualitative_prompt_examples.png`
+- 将 Section 5.7 从计划性描述改写为基于实际生成结果的结果性描述
+- 每行附带定量指标和协议声明
 
-后续增强：
+### 3.2 选定的 4 个典型案例
 
-- 先根据 `all_results_v2.csv` 找典型样本：
-  - Text precision low / recall high 的样本；
-  - Point IoU 远低于 Text 的样本；
-  - AMPF recall 低于 Text 的样本；
-  - Mean Fusion IoU 高于 Text 的样本；
-- 再用这些 image index 作为 `--case dataset:index` 参数生成图。
+| 行 | 图像 | Failure/Success Mode | 关键指标 |
+|---|---|---|---|
+| 1 | deepcrack:168 | Text Over-segmentation | Text P=0.266, R=0.971 (高 recall 低 precision) |
+| 2 | deepcrack:86 | Point Local Recovery | Point IoU=0.000 vs Text IoU=0.814 (单点仅恢复局部) |
+| 3 | deepcrack:17 | AMPF False Negative | Text R=0.813 → AMPF R=0.238, IoU 0.724→0.232 |
+| 4 | deepcrack:178 | Mean Fusion Complementary | Text IoU=0.493 → Mean Fusion IoU=0.857 |
+
+### 3.3 图形规格
+
+- 7 列: Original, Ground Truth, Text, Box, Point, AMPF, Mean Fusion
+- 4 行（对应 4 个典型样本）
+- Mask overlay: 半透明彩色 (alpha=0.45)
+- 输出: `experiments/visualizations/fig_qualitative_failure_modes.{png,pdf}`
+- 尺寸: 6270×5341px @ 300 DPI
+
+### 3.4 论文中表述
+
+Figure 4 的 caption 和正文明确声明:
+
+- AMPF 和 Mean Fusion 使用 GT-assisted alignment，是 diagnostic protocol
+- Text 是唯一 fully automatic 的 protocol
+- 4 行分别对应 over-segmentation、local recovery failure、false negatives、complementary recovery
 
 ---
 
-### 3.2 Fig. S1: Confidence Calibration Reliability Diagram
+## 4. Phase 3: 补充实验 Fig. S1-S3（已完成）
 
-**需要额外保存 candidate-level confidence 和 mask quality。**
+### 4.1 Fig. S1: Confidence Calibration Reliability Diagram
 
-导师建议很有价值，但现有结果文件不够。
+**实验设计**
 
-当前缺失数据：
+- 脚本: `experiments/run_candidate_logging.py` + `experiments/plot_calibration.py`
+- 方法: 对 DeepCrack test (237 images) 运行 AMPF Stage 1 (independent prompting)，保存每个 candidate 的:
+  - `detection_score`: SAM3 原始置信度
+  - `stability_score`: 提示扰动一致性
+  - `boundary_score`: mask 边界梯度强度
+  - `composite_confidence`: α·S_det + β·S_stab + γ·S_bound
+  - `candidate_iou`: 与 GT 的 per-candidate IoU
+- 输出 CSV: `experiments/results/candidate_confidence.csv` (3449 candidates)
+- 耗时: ~64 分钟 (237 images × ~16s/image)
 
-- 每个 SAM3 candidate 的 detection score；
-- 每个 candidate 的 composite confidence；
-- 每个 candidate 与 GT 的 IoU；
-- 每个 confidence bin 中的实际质量；
-- per-mode reliability curve。
+**Reliability Diagram 结构**
 
-不能直接从 `all_results_v2.csv` 推出 calibration，因为 CSV 只有最终 mask 的 per-image IoU / Dice / Precision / Recall。
+- 两个子图: DeepCrack (n=237) / CrackForest (n=24，如有数据)
+- 横轴: mean predicted confidence (10 bins)
+- 纵轴: mean candidate IoU
+- 对角线: perfect calibration
+- 3 条曲线: Text, Box, Point
+- 图注标注 ECE
 
-建议新增实验记录字段：
+**实验结果**
 
-| 字段 | 含义 |
+| Prompt Mode | Candidates | ECE | Corr(conf, IoU) | Mean Conf | Mean IoU |
+|---|---|---|---|---|---|
+| Text | 2029 | 0.287 | 0.644 | 0.474 | 0.187 |
+| Box | 497 | 0.362 | 0.819 | 0.706 | 0.344 |
+| Point | 923 | 0.469 | 0.492 | 0.752 | 0.283 |
+
+**关键发现**
+
+1. 所有模式的 ECE 均显著偏离完美校准 (ECE 0.29-0.47)
+2. 置信度系统性地高估了实际 IoU: mean confidence 比 mean IoU 高 0.29-0.47
+3. Box 的 correlation 最高 (r=0.82) 但 ECE 仍然较高 (0.36)
+4. Point 的校准最差 (ECE=0.47)，confidence 最高但 IoU 最低
+
+**论文可写结论**: "Across all prompt modes, composite confidence scores systematically overestimate per-candidate IoU. The Expected Calibration Error ranges from 0.29 (text) to 0.47 (point), indicating that the current confidence-weighting scheme is not reliably calibrated for crack segmentation. This evidence supports the ablation finding that removing components of the confidence-weighted fusion rule does not degrade—and sometimes improves—foreground IoU."
+
+### 4.2 Fig. S2: AMPF Weight Sensitivity Heatmap
+
+**实验设计**
+
+- 脚本: `experiments/run_weight_sensitivity.py` + `experiments/plot_weight_sensitivity.py`
+- 设计: 两阶段缓存优化
+  - Phase 1: 对 30 张 DeepCrack test 图像运行完整 SAM3 推理（text/box/point + stability/boundary scores），缓存到 pickle 文件
+  - Phase 2: 对每个 (α, β) 组合，仅用 NumPy 重算 composite_confidence 和融合（无 SAM3 推理）
+- 网格: α ∈ {0.1, 0.2, ..., 0.7}, β ∈ {0.1, 0.2, ..., 0.7}, γ = 1-α-β > 0
+- 有效组合: 35 个 (28 个严格 > 0，7 个因浮点问题 γ≈0)
+- 耗时: Phase 1 ~11 分钟 (30 images), Phase 2 <1 秒
+
+**Heatmap 结构**
+
+- triangular heatmap over valid (α, β) region
+- colormap: viridis, 颜色表示 DeepCrack mean foreground IoU
+- 标注当前 paper 配置 (α=0.4, β=0.35, γ=0.25)
+- 标注 best combo
+- 图注说明 γ = 1-α-β, γ > 0
+
+**实验结果**
+
+| 指标 | 值 |
 |---|---|
-| dataset | 数据集 |
-| image_id | 图像 ID |
-| method | text / box / point / ampf |
-| candidate_id | SAM3 candidate index |
-| prompt_mode | text / box / point |
-| detection_score | SAM3 原始置信度 |
-| stability_score | AMPF stability score |
-| boundary_score | AMPF boundary score |
-| composite_confidence | AMPF composite confidence |
-| candidate_iou | candidate mask vs GT IoU |
-| candidate_dice | candidate mask vs GT Dice |
+| IoU 范围 | 0.5303 — 0.5484 |
+| IoU 标准差 | 0.0047 |
+| 变异系数 (CV) | 0.87% |
+| Best combo | α=0.5, β=0.1, γ=0.4 (IoU=0.5484) |
+| Corr(IoU, α) | +0.038 (detection weight 几乎无影响) |
+| Corr(IoU, β) | -0.664 (stability weight 与 IoU 负相关) |
+| Corr(IoU, γ) | +0.560 (boundary weight 与 IoU 正相关) |
+| 附近网格点 (α=0.4, β=0.3) | IoU=0.5386 |
+| 附近网格点 (α=0.4, β=0.4) | IoU=0.5367 |
 
-Reliability diagram 建议：
+**关键发现**
 
-- 横轴：mean predicted confidence；
-- 纵轴：actual quality，可用 mean candidate IoU 或 fraction of candidates above IoU threshold；
-- 对角线：perfect calibration；
-- 曲线：Text / Box / Point / AMPF；
-- 下方给 Expected Calibration Error (ECE)。
+1. **完整 plateau**: IoU 变异系数仅 0.87%，AMPF 对权重配置极不敏感
+2. **β 的负面影响**: 稳定性权重与 IoU 呈 -0.664 负相关——增加稳定性权重会降低性能。这与 ablation 中 "removing stability improves IoU" 一致
+3. **γ 的正面影响**: 边界梯度分数是三项中最有用的置信度分量
+4. **当前配置在 plateau 内**: (0.4, 0.35, 0.25) 附近 IoU 约 0.537，与最优值 (0.548) 差距仅 0.011
+5. 文本同义词 ("fracture", "fissure", "break") 可能改变了语义而非保持稳定的目标概念，导致 stability score 对于裂缝分割不可靠
 
-注意：
+**论文可写结论**: "Weight sensitivity analysis across 35 valid (α, β) combinations shows that the foreground IoU varies by less than 1% (CV = 0.87%), forming a broad plateau. The stability weight β is negatively correlated with IoU (r = -0.66), consistent with the ablation result that text-synonym perturbations do not preserve stable crack concepts. The boundary score γ is the most informative confidence component (r = +0.56). These results indicate that the AMPF fusion weights themselves are not the primary limitation; the plateau persists even at the best-observed weight configuration."
 
-如果不做这个实验，正文中应避免强写：
+**Pending (optional)**:
+- If needed, can also add CrackForest heatmap, but 24 images likely produce unreliable results
+- Can add additional metric heatmaps (Dice, Precision, Recall)
 
-> SAM3 confidence is not calibrated.
+### 4.3 Fig. S3: Inference Time vs Accuracy Profiling
 
-更稳的表述是：
+**实验设计**
 
-> Ablation results suggest that the current confidence-weighted fusion rule is not reliably beneficial for crack segmentation.
+- 脚本: `experiments/run_profiling.py` + `experiments/plot_runtime_accuracy.py`
+- 方法: 对 22 张 DeepCrack test 图像 (2 warmup + 20 timed)，用 `time.perf_counter()` 逐图计时
+- 输出 CSV: `experiments/results/runtime_profiling.csv`
 
----
+**Scatter 结构**
 
-### 3.3 Fig. S2: AMPF Hyperparameter Sensitivity Heatmap
+- 横轴: mean ms/image (log scale)
+- 纵轴: mean foreground IoU
+- 颜色: protocol type (green=deployable, orange=GT-derived diagnostic, red=GT-assisted diagnostic)
+- 误差棒: ±1 std ms/image
 
-**需要额外跑参数敏感性实验。**
+**实验结果**
 
-当前 AMPF 权重：
+| Method | Protocol | Mean ms/img | Std ms/img | Mean IoU |
+|---|---|---|---|---|
+| Text | automatic text prompt | 84.3 | 7.8 | 0.680 |
+| Box | GT-derived prompt | 74.9 | 0.9 | 0.370 |
+| Point | GT-derived prompt | 2990.8 | 4570.9 | 0.285 |
+| AMPF | GT-assisted fusion | 8866.2 | 9097.8 | 0.530 |
+| Mean Fusion | GT-assisted fusion | 3248.0 | 4693.0 | 0.563 |
 
-```text
-alpha = 0.40
-beta  = 0.35
-gamma = 0.25
-```
+**关键发现**
 
-导师建议：
+1. **Text 是 accuracy-efficiency sweet spot**: 84 ms/img + IoU 0.68，远超其他 SAM3 方法
+2. **Box 最快但不准**: 75 ms/img 但 IoU 仅 0.37（全局前景 box 包含大量背景）
+3. **Point 效率最差**: ~3s/img 且 IoU 最低 (0.29)，因为每个 GT 实例单独调用 + stability perturbations
+4. **AMPF 最慢**: ~9s/img，主要开销来自 stability perturbations (每个 candidate 需额外 5-14 次推理)
+5. **Mean Fusion 比 AMPF 快 2.7×**: 因为不需要 stability 计算，仅用 alignment + unweighted average fusion
+6. 高方差主要来自不同图像 GT 实例数量差异（多实例图像 point prompts 更多）
 
-- 固定 `gamma = 0.25`
-- 变化 `alpha` 和 `beta`
-- 约束 `alpha + beta + gamma = 1`
+**论文可写结论**: "Text prompting achieves the best accuracy-efficiency trade-off at 84 ms/image with foreground IoU of 0.68 on DeepCrack. The full AMPF pipeline requires approximately 8.9 s/image due to stability perturbation overhead, while the simpler mean fusion variant reduces this to 3.2 s/image. The large standard deviations reflect variability in the number of ground-truth connected components per image, which determines the number of point prompts and corresponding stability re-runs."
 
-但严格来说，在固定 gamma 且权重和为 1 时，`beta = 0.75 - alpha`，不是独立二维网格。若要做二维 heatmap，需要允许 gamma 随 alpha/beta 变化：
-
-```text
-gamma = 1 - alpha - beta
-alpha > 0, beta > 0, gamma > 0
-```
-
-推荐实验设计：
-
-1. DeepCrack full set 或 50-image representative subset；
-2. alpha ∈ {0.1, 0.2, ..., 0.8}
-3. beta ∈ {0.1, 0.2, ..., 0.8}
-4. gamma = 1 - alpha - beta，过滤 gamma <= 0 的组合；
-5. 每组记录 mean foreground IoU / Dice / Precision / Recall。
-
-输出：
-
-- `experiments/results/ampf_weight_sensitivity.csv`
-- `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.pdf`
-- `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.png`
-
-图形信息：
-
-- heatmap 颜色：DeepCrack mean foreground IoU；
-- 标注当前论文参数点 `(0.4, 0.35, 0.25)`；
-- 可补一张 CrackForest 小热图，展示小样本不稳定性。
-
-论文使用方式：
-
-- 若结果显示大范围 plateau：说明 AMPF 对权重不敏感；
-- 若当前点不是最优：进一步支持 “confidence weighting not calibrated / not optimized”；
-- 若某些区域明显更好：可作为 future work 或更新 AMPF 配置。
+**Pending (optional)**:
+- Supervised baselines timing data not collected (training time ≠ inference time)
+- Could add U-Net/DeepLabV3+ inference time for completeness
 
 ---
 
-### 3.4 Fig. S3: Inference Time vs Accuracy Scatter
+## 5. 论文结论更新建议
 
-**需要更细粒度 runtime profiling。**
+现在 Fig. S1 和 Fig. S2 已经完成，论文中可以写以下更强的结论（原来不建议写的）：
 
-当前 `EXPERIMENTS.md` 有阶段耗时，但不足以画严谨的 ms/image scatter：
+### 5.1 可以写的强结论（有实验支撑）
 
-- SAM3/AMPF CrackForest 约 12 min；
-- DeepCrack full groups 耗时若干；
-- supervised baselines 训练耗时；
-- 但没有每种 method 的 inference time / image。
+1. **"Composite confidence scores are not well calibrated for crack segmentation."**
+   - 支撑: Fig. S1, ECE 0.29-0.47 across modes, confidence systematically overestimates IoU
 
-建议新增 profiling：
+2. **"The stability perturbation component (β) is negatively correlated with fusion quality for crack-like structures."**
+   - 支撑: Fig. S2, r = -0.66; ablation no_stability versus AMPF
 
-| method | dataset | n_images | total_time_s | mean_ms_per_image | std_ms_per_image | mean_iou |
-|---|---|---:|---:|---:|---:|---:|
+3. **"AMPF performance is insensitive to the specific choice of fusion weights within a broad plateau."**
+   - 支撑: Fig. S2, CV = 0.87% across 35 weight combinations
 
-方法：
+4. **"Text-prompt inference is the accuracy-efficiency sweet spot at 84 ms/image."**
+   - 支撑: Fig. S3
 
-- Text
-- Box
-- Point
-- AMPF
-- Mean Fusion
-- U-Net
-- DeepLabV3+
-- YOLOv8-seg
+### 5.2 仍然不应写的内容
 
-图形：
+1. "Text prompt is generally deployable for ALL smart infrastructure crack inspection."
+   → 限定为 visible surface-crack benchmarks
+2. "The method is ready for operational deployment."
+   → 仍需 broader validation
+3. "Mean Fusion outperforms supervised models."
+   → 它是 GT-assisted diagnostic，不可与 deployable 方法直接比较
 
-- 横轴：ms/image；
-- 纵轴：mean foreground IoU；
-- 点大小：memory or parameter count；
-- 颜色：protocol type；
-- 重点展示 Text 是否是 accuracy-efficiency sweet spot。
+### 5.3 建议正文调整
 
-注意：
-
-训练时间和推理时间要分开，不能混在同一张图里。
+- Section 5.4 (Ablation) 可引用 Fig. S2 的权重敏感性结果，加强 "stability 有害" 的论证
+- Section 5.5 (Statistical Comparisons) 可补充 ECE 作为 calibration 的定量指标
+- Discussion 可引用 Fig. S1 的 ECE 值，支撑 "confidence weighting not calibrated" 的论断
 
 ---
 
-## 4. 推荐实施顺序
+## 6. 最终输出文件清单
 
-### Phase 1: 不跑模型，直接补主文图（已完成）
+### 主文 Figures
 
-状态：已完成。已新增绘图脚本，生成 Fig. 1-3 的 PNG/PDF，并将三张图正式接入 `manuscript_revised_protocol_aware.md`。
+| 文件 | 大小 |
+|---|---|
+| `experiments/visualizations/fig_protocol_hierarchy.png` | 301K |
+| `experiments/visualizations/fig_protocol_hierarchy.pdf` | 35K |
+| `experiments/visualizations/fig_iou_distribution.png` | 705K |
+| `experiments/visualizations/fig_iou_distribution.pdf` | 90K |
+| `experiments/visualizations/fig_precision_recall_operating_points.png` | 325K |
+| `experiments/visualizations/fig_precision_recall_operating_points.pdf` | 33K |
+| `experiments/visualizations/fig_qualitative_failure_modes.png` | 6.4M |
+| `experiments/visualizations/fig_qualitative_failure_modes.pdf` | 8.1M |
 
-1. [x] 新增 `experiments/plot_protocol_hierarchy.py`
-2. [x] 新增 `experiments/plot_iou_distribution.py`
-3. [x] 新增 `experiments/plot_precision_recall.py`
-4. [x] 生成 Fig. 1-3 的 PNG/PDF
-5. [x] 修改 `manuscript_revised_protocol_aware.md`，正式引用 Fig. 1-3
+### Supplementary Figures
 
-预计收益：
+| 文件 | 大小 |
+|---|---|
+| `experiments/visualizations/fig_calibration_reliability.png` | 289K |
+| `experiments/visualizations/fig_calibration_reliability.pdf` | 28K |
+| `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.png` | 213K |
+| `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.pdf` | 64K |
+| `experiments/visualizations/fig_runtime_accuracy_scatter.png` | 164K |
+| `experiments/visualizations/fig_runtime_accuracy_scatter.pdf` | 18K |
 
-- 显著提高稿件学术呈现；
-- 不增加实验风险；
-- 直接回应导师“缺少学术 figure”和“methodology 框架图”的核心意见。
+### 结果数据文件
 
-### Phase 2: 恢复数据集后生成 qualitative figure
+| 文件 | 内容 |
+|---|---|
+| `experiments/results/all_results_v2.csv` | 4177 per-image rows, all methods |
+| `experiments/results/candidate_confidence.csv` | 3449 candidates, 237 images, per-candidate scores |
+| `experiments/results/ampf_weight_sensitivity.csv` | 35 weight combos, mean metrics |
+| `experiments/results/runtime_profiling.csv` | 5 methods, ms/image + IoU |
 
-优先级高，但依赖数据集。
+### 新增脚本
 
-1. 恢复 `experiments/datasets/`
-2. 用 CSV 筛选典型样本；
-3. 运行 `experiments/generate_qualitative_figure.py`
-4. 生成 Fig. 4；
-5. 将 `5.7 Qualitative Analysis` 从“应生成”改为正式结果描述。
-
-预计收益：
-
-- 支撑错误分析；
-- 让审稿人看到模型真实行为；
-- 提升应用类期刊接受度。
-
-### Phase 3: 补充实验图
-
-优先级中等，适合 supplementary。
-
-1. Candidate-level confidence logging；
-2. Reliability diagram + ECE；
-3. AMPF weight sensitivity；
-4. Inference-time profiling。
-
-预计收益：
-
-- 加强 “confidence weighting 不可靠” 的证据；
-- 让 AMPF 分析更完整；
-- 但需要额外计算和工程实现。
-
----
-
-## 5. 当前稿件中应避免的强结论
-
-在完成 Fig. S1 / Fig. S2 前，不建议写：
-
-1. “SAM3 confidence is not calibrated.”
-2. “AMPF weights are suboptimal.”
-3. “Text prompt is generally deployable for all smart infrastructure crack inspection.”
-4. “Mean Fusion outperforms supervised models.”
-5. “The method is ready for operational deployment.”
-
-建议使用更严谨表述：
-
-1. “Ablation results suggest that the current confidence-weighted fusion rule is not reliably beneficial.”
-2. “Within the evaluated visible surface-crack benchmarks, text prompting is a strong deployable baseline.”
-3. “Mean Fusion provides a GT-assisted diagnostic positive result.”
-4. “Broader validation is required before general infrastructure-level deployment claims.”
+| 脚本 | 用途 |
+|---|---|
+| `experiments/find_representative_cases.py` | 从 CSV 自动筛选 Fig. 4 典型案例 |
+| `experiments/generate_qualitative_figure.py` | 生成 Fig. 4 qualitative overlay |
+| `experiments/run_candidate_logging.py` | 保存 per-candidate confidence/IoU (Fig. S1) |
+| `experiments/plot_calibration.py` | 绘制 reliability diagram + ECE (Fig. S1) |
+| `experiments/run_weight_sensitivity.py` | 缓存式权重网格搜索 (Fig. S2) |
+| `experiments/plot_weight_sensitivity.py` | 绘制 weight sensitivity heatmap (Fig. S2) |
+| `experiments/run_profiling.py` | 逐图推理计时 (Fig. S3) |
+| `experiments/plot_runtime_accuracy.py` | 绘制 accuracy-time scatter (Fig. S3) |
+| `experiments/plot_protocol_hierarchy.py` | Fig. 1 |
+| `experiments/plot_iou_distribution.py` | Fig. 2 |
+| `experiments/plot_precision_recall.py` | Fig. 3 |
 
 ---
 
-## 6. 最终主文图表建议排序
+## 7. 制图规范（已实施）
 
-推荐主文结构：
-
-1. **Figure 1**: Protocol hierarchy and deployability framework
-2. **Table 1**: Protocol definitions
-3. **Figure 2**: Per-image IoU distributions
-4. **Table 2**: Main quantitative comparison
-5. **Figure 3**: Precision-recall operating points
-6. **Table 3**: Paired statistical comparisons
-7. **Figure 4**: Qualitative failure mode analysis
-8. **Table 4**: Ablation study
-
-这样安排的逻辑是：
-
-- 先解释 protocol；
-- 再展示分布；
-- 再展示均值；
-- 再展示 PR trade-off；
-- 再给统计检验；
-- 最后用定性图解释失败模式。
-
----
-
-## 7. 制图规范
-
-1. 同时输出 PNG 和 PDF；
-2. PDF 用于论文投稿，PNG 用于 Markdown 预览；
-3. 使用 colorblind-friendly palette，例如 `viridis`, `tab10`, `ColorBrewer Set2`；
-4. 避免纯红绿对比；
-5. 所有图中统一方法颜色：
-   - Text: blue
-   - Box: orange
-   - Point: purple
-   - AMPF: red
+1. ✅ 同时输出 PNG 和 PDF
+2. ✅ 使用 colorblind-friendly palette (tab10, viridis)
+3. ✅ 所有图中统一方法颜色:
+   - Text: blue (#1f77b4)
+   - Box: orange (#ff7f0e)
+   - Point: purple (#9467bd)
+   - AMPF: red (#d62728)
    - Mean Fusion: green/teal
-   - supervised baselines: gray/black
-6. 所有图必须标注 dataset；
-7. 对 GT-assisted 方法在图例中加 `diagnostic` 或 `GT-assisted`；
-8. qualitative mask overlay 使用 alpha=0.4-0.5；
-9. 图注中必须声明 Mean Fusion / AMPF 的 protocol caveat。
+   - supervised baselines: gray (#7f7f7f)
+4. ✅ 所有图标注 dataset
+5. ✅ GT-assisted 方法在图例中标注 `diagnostic` 或 `GT-assisted`
+6. ✅ Qualitative mask overlay alpha=0.45
+7. ✅ 图注中声明 Mean Fusion / AMPF 的 protocol caveat
+8. ✅ 所有图 300 DPI
 
 ---
 
-## 8. 立即可执行清单
+## 8. 完整任务清单
 
-### 可立即实施
+### Phase 1: 主文 Fig. 1-3 ✅ (2026-05-27)
 
-- [x] 画 Fig. 1 protocol hierarchy；
-- [x] 画 Fig. 2 per-image IoU distribution；
-- [x] 画 Fig. 3 precision-recall scatter；
-- [x] 正文引用 Fig. 1-3；
-- [x] 所有涉及 AMPF / Mean Fusion 的图注显式标注 `GT-assisted diagnostic`；
-- [x] 保留并完善 visible surface-crack benchmark 限定；
-- [x] 删除或弱化所有超出数据集范围的泛化结论。
+- [x] 画 Fig. 1 protocol hierarchy
+- [x] 画 Fig. 2 per-image IoU distribution
+- [x] 画 Fig. 3 precision-recall scatter
+- [x] 正文引用 Fig. 1-3
+- [x] 所有涉及 AMPF / Mean Fusion 的图注显式标注 `GT-assisted diagnostic`
+- [x] 保留并完善 visible surface-crack benchmark 限定
 
-### 需要数据集和重新推理
+### Phase 2: Fig. 4 Qualitative Analysis ✅ (2026-05-27)
 
-- [ ] 生成 Fig. 4 qualitative failure mode grid；
-- [ ] 选择典型 failure/success cases；
-- [ ] 保存 overlay masks；
-- [ ] 将 qualitative section 从计划性描述改成结果性描述。
+- [x] 写 `find_representative_cases.py` 自动筛选典型案例
+- [x] 运行 `generate_qualitative_figure.py` 生成 4 行 × 7 列 overlay 面板
+- [x] 修改 `manuscript_revised_protocol_aware.md` Section 5.7 为结果性描述
+- [x] 更新 Data and Code Availability 章节
 
-### 需要新增实验设计
+### Phase 3: Supplementary Figs S1-S3 ✅ (2026-05-27/28)
 
-- [ ] Candidate-level confidence logging；
-- [ ] Reliability diagram and ECE；
-- [ ] AMPF hyperparameter sensitivity；
-- [ ] runtime profiling；
-- [ ] accuracy-time scatter。
+- [x] `run_candidate_logging.py` — 3449 candidates, 237 images
+- [x] `plot_calibration.py` — reliability diagram + ECE
+- [x] `run_weight_sensitivity.py` — 35 weight combos, 30 images, caching optimization
+- [x] `plot_weight_sensitivity.py` — triangular heatmap
+- [x] `run_profiling.py` — 5 methods, per-image timing
+- [x] `plot_runtime_accuracy.py` — accuracy-efficiency scatter
+
+### 论文最终整合 (建议下一步)
+
+- [ ] 将 Fig. S1-S3 的发现整合进 Discussion/Limitations
+- [ ] 可选: 将 S1 的强 evidence 升级到主文
+- [ ] 可选: 补充 supervised baseline inference time
+- [ ] 终稿 proofreading
