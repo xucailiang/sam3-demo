@@ -168,10 +168,10 @@ new_point    = (40.0, 68.0)  # on foreground ✓
 
 ```
 experiments/results/
-├── all_results_v2.csv              # 合并后的完整结果 (4176 rows)
-├── summary_stats_v2.csv            # per-method 汇总 (32 rows)
+├── all_results_v2.csv              # 合并后的完整结果 (4176 per-image entries; 4177 CSV lines incl. header)
+├── summary_stats_v2.csv            # per-method 汇总 (32 entries; 33 CSV lines incl. header)
 ├── paper_tables_v2.tex             # 4 LaTeX tables
-└── point_experiments_v2.csv        # point 重跑汇总 (2610 rows)
+└── point_experiments_v2.csv        # point 相关重跑汇总 (2370 entries; 2371 CSV lines incl. header)
 
 experiments/visualizations/
 ├── fig_main_comparison_crackforest.png

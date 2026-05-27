@@ -43,8 +43,8 @@ pnpm-debug.log*
 models/
 
 # Runtime outputs
-# backend/runs/
-# runs/
+backend/runs/
+runs/
 # experiments/results/
 # experiments/visualizations/
 # experiments/datasets/

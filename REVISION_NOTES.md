@@ -1,6 +1,8 @@
 # Manuscript Revision Notes — 2026-05-25
 
-本文档记录基于导师预审意见 (`manuscript_review_issues.md`) 对 `manuscript.md` 和 `EXPERIMENTS.md` 进行的系统性修正。**所有修正均为文档表述修正，不涉及重新运行实验。**
+本文档记录基于导师预审意见 (`manuscript_review_issues.md`) 对 `manuscript.md` 和 `EXPERIMENTS.md` 进行的第一轮系统性修正。该轮修正为文档表述修正，未重新运行实验。
+
+> **后续更新（2026-05-26）**：point protocol 已从 centroid-only 修正为 nearest-foreground point，并完成 CrackForest 与 DeepCrack 重跑。最终论文与实验记录应以 `POINT_PROTOCOL_FIX.md`、`experiments/results/all_results_v2.csv`、`experiments/results/summary_stats_v2.csv` 和 `experiments/results/paper_tables_v2.tex` 为准。本文件保留为第一轮修订历史记录。
 
 ---
 
@@ -139,7 +141,7 @@
 
 以下为导师建议中**未纳入本次修正**的项目，属于"强烈建议"或"后续工作":
 
-1. **Nearest-foreground point protocol**: 需修改 `prompt_generator.py` + 重跑 point 相关实验 (~2h)
+1. **Nearest-foreground point protocol**: 已完成，见 `POINT_PROTOCOL_FIX.md` 与 v2 结果文件
 2. **Per-instance box protocol**: 需修改 box 生成逻辑 + 重跑 box 相关实验 (~2h)
 3. **Qualitative mask visualization**: 需生成 overlay 图（可从已有推理结果生成，不需重跑）
 4. **Dice/F1 去重**: 当前二值像素级设置下 Dice=F1，主表可去掉 F1 放入 appendix
@@ -156,4 +158,4 @@
 | `manuscript.md` | 已修正 | 所有 "Must Fix" 项 |
 | `EXPERIMENTS.md` | 已修正 | Text prompt / 监督基线 / IoU naming |
 | `manuscript_review_issues.md` | 未修改 | 导师原评审，保留作为参考 |
-| `experiments/results/all_results.csv` | 未修改 | 实验结果数值未变 |
+| `experiments/results/all_results_v2.csv` | 已生成 | nearest-foreground point protocol 后的最终结果文件 |

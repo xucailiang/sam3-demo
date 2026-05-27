@@ -1,7 +1,7 @@
 # 实验完整记录 — SAM3 Multi-Prompt Fusion for Crack Segmentation
 
-> 实验日期：2026-05-21
-> 数据来源：`experiments/results/all_results.csv`（4176 行）
+> 实验日期：2026-05-21；point protocol 修正与 DeepCrack 重跑：2026-05-26
+> 数据来源：`experiments/results/all_results_v2.csv`（4176 条 per-image 结果；CSV 含表头共 4177 行）
 > 代码版本：`sam3-demo` @ commit `a035474`
 
 ---
@@ -42,7 +42,7 @@
 | 协议 | 含义 | 使用场景 |
 |------|------|---------|
 | `automatic_text_prompt` | 使用固定文本 "crack" | Text 单模式 |
-| `oracle_gt_prompt` | 从 GT mask 生成 box/point prompt | Box/Point 单模式 |
+| `oracle_gt_prompt` | 从 GT mask 生成 box/point prompt；point 使用 nearest-foreground protocol | Box/Point 单模式 |
 | `oracle_gt_prompt_gt_alignment` | Oracle prompt + 实例级 GT 对齐 | AMPF, Ablation, Mode Combo |
 | `supervised_train_val_test` | 全监督训练 (train/val/test 三集) | U-Net, DeepLabV3+, YOLOv8-seg |
 
@@ -54,7 +54,7 @@
 |---|------|------|------|
 | 1 | `text` | automatic_text_prompt | Text 单模式基线 |
 | 2 | `box` | oracle_gt_prompt | Box 单模式基线 |
-| 3 | `point` | oracle_gt_prompt | Point 单模式基线 |
+| 3 | `point` | oracle_gt_prompt | Point 单模式基线（每个 GT 连通域一个 nearest-foreground positive point） |
 | 4 | `ampf` | oracle_gt_prompt_gt_alignment | AMPF 全管线（text+box+point 融合） |
 | 5 | `ablation_no_detection` | oracle_gt_prompt_gt_alignment | 去掉检测置信度 S_det |
 | 6 | `ablation_no_stability` | oracle_gt_prompt_gt_alignment | 去掉稳定性评分 S_stab |
@@ -84,25 +84,25 @@
 |------|-----------------|-----------------|----------------|----------------|
 | **Text** | **0.4355** | 0.6000 | **0.6658** | 0.7866 |
 | Box | 0.3439 | 0.4786 | 0.5408 | 0.6441 |
-| Point | 0.1166 | 0.1768 | 0.3129 | 0.3860 |
-| AMPF (Ours) | 0.4249 | 0.5843 | 0.6645 | 0.7854 |
+| Point (nearest-fg) | 0.3014 | 0.4332 | 0.5199 | 0.6278 |
+| AMPF (Ours) | 0.4145 | 0.5737 | 0.6671 | 0.7880 |
 
-**发现：** Text 单模态在两个数据集上均优于或持平 AMPF。Box 和 Point 融合非但没有提升，反而拉低了 Text 的质量。
+**发现：** Text 单模态是最强的可部署单提示基线。nearest-foreground point 相比旧 centroid protocol 大幅提升，但仍弱于 text 和 box；AMPF 在 DeepCrack 上略高于 Text，在 CrackForest 上低于 Text，整体收益不稳定。
 
 ### 4.2 消融实验 — AMPF 组件贡献
 
 | 消融 | CrackForest IoU | DeepCrack IoU | vs AMPF (DC) |
 |------|-----------------|----------------|-------------|
-| AMPF (full) | 0.4249 | 0.6645 | — |
-| w/o S_det | 0.4352 | 0.6702 | +0.0057 |
-| w/o S_stab | 0.4382 | 0.6694 | +0.0049 |
-| w/o S_bnd | 0.4215 | 0.6589 | -0.0056 |
-| **w/o alignment** | **0.3285** | **0.4418** | **-0.2227** |
-| fusion=max | 0.4276 | 0.6664 | +0.0019 |
-| **fusion=mean** | **0.4535** | **0.6791** | **+0.0146** |
+| AMPF (full) | 0.4145 | 0.6671 | — |
+| w/o S_det | 0.4087 | 0.6639 | -0.0032 |
+| w/o S_stab | 0.4279 | 0.6691 | +0.0020 |
+| w/o S_bnd | 0.4122 | 0.6605 | -0.0066 |
+| **w/o alignment** | **0.3506** | **0.4676** | **-0.1995** |
+| fusion=max | 0.4084 | 0.6746 | +0.0076 |
+| **fusion=mean** | **0.4587** | **0.6815** | **+0.0144** |
 
 **发现：**
-- **Alignment 是关键**：去掉后 DeepCrack 下降 33.5%（0.6645 → 0.4418）
+- **Alignment 是关键**：去掉后 DeepCrack IoU 下降 0.1995（0.6671 → 0.4676），CrackForest 下降 0.0639（0.4145 → 0.3506）
 - **等权平均 > 置信度加权**：fusion=mean 在两个数据集均优于 AMPF
 - 三个评分组件贡献微弱且方向不一致
 
@@ -111,25 +111,25 @@
 | 方法 | CrackForest IoU | DeepCrack IoU |
 |------|-----------------|----------------|
 | Text | 0.4355 | 0.6658 |
-| Box+Text | 0.4281 | 0.6658 |
-| Point+Text | 0.4257 | 0.6523 |
-| Box+Point | 0.4075 | 0.6202 |
-| AMPF (all three) | 0.4249 | 0.6645 |
+| Box+Text | 0.4282 | 0.6654 |
+| Point+Text | 0.3972 | 0.6435 |
+| Box+Point | 0.4012 | 0.6466 |
+| AMPF (all three) | 0.4145 | 0.6671 |
 
-**发现：** 任何包含 Point 或 Box 的组合都 ≤ Text alone。双模态最佳 = Text alone。
+**发现：** nearest-foreground point 改善了 point 单模式质量，但含 point 的融合组合仍未稳定超过 Text。DeepCrack 上 AMPF 只比 Text 高 0.0013，CrackForest 上则低于 Text，说明多提示融合的收益依赖对齐与置信度校准。
 
 ### 4.4 零训练 vs 全监督
 
 | 方法 | CrackForest IoU | DeepCrack IoU | 训练需求 |
 |------|-----------------|----------------|---------|
 | Text (zero-training) | 0.4355 | 0.6658 | 无 |
-| AMPF (zero-training) | 0.4249 | 0.6645 | 无 |
-| fusion=mean (zero) | 0.4535 | 0.6791 | 无 |
-| **U-Net** (100 epochs) | **0.4576** | 0.6427 | 标注数据 |
-| DeepLabV3+ (100 epochs) | 0.4384 | 0.6298 | 标注数据 |
-| YOLOv8-seg (100 epochs) | 0.3205 | 0.4155 | 标注数据 |
+| AMPF (GT-assisted diagnostic) | 0.4145 | 0.6671 | 无训练；使用 GT-assisted prompt/alignment |
+| fusion=mean (GT-assisted diagnostic) | 0.4587 | 0.6815 | 无训练；使用 GT-assisted prompt/alignment |
+| **U-Net** (50 epochs) | **0.4576** | 0.6661 | 标注数据 |
+| DeepLabV3+ (50 epochs) | 0.4384 | 0.6698 | 标注数据 |
+| YOLOv8-seg (100 epochs) | 0.3069 | 0.4198 | 标注数据 |
 
-**发现：** DeepCrack 上 Text (0.666) > U-Net (0.643)；CrackForest 上 U-Net (0.458) 略胜 Text (0.436)。
+**发现：** DeepCrack 上 Text (0.6658) 与 U-Net (0.6661) 基本持平，略低于 DeepLabV3+ (0.6698)。GT-assisted mean fusion 达到 0.6815，但应作为诊断性结果解读，不等同于可部署零训练方法。
 
 ### 4.5 DeepCrack 完整结果总表（237 张，各组均含 IoU/Dice/Precision/Recall/F1）
 
@@ -137,22 +137,22 @@
 |------|------|------|-----------|--------|-----|
 | text | 0.6658 | 0.7866 | 0.7441 | 0.8854 | 0.7866 |
 | box | 0.5408 | 0.6441 | 0.6603 | 0.7516 | 0.6441 |
-| point | 0.3129 | 0.3860 | 0.3584 | 0.6363 | 0.3860 |
-| ampf | 0.6645 | 0.7854 | 0.8118 | 0.8106 | 0.7854 |
-| no_detection | 0.6702 | 0.7907 | 0.8176 | 0.8133 | 0.7907 |
-| no_stability | 0.6694 | 0.7897 | 0.8147 | 0.8149 | 0.7897 |
-| no_boundary | 0.6589 | 0.7805 | 0.8017 | 0.8134 | 0.7805 |
-| no_alignment | 0.4418 | 0.5205 | 0.6487 | 0.5150 | 0.5205 |
-| fusion_max | 0.6664 | 0.7866 | 0.7660 | 0.8693 | 0.7866 |
-| **fusion_mean** | **0.6791** | **0.7985** | 0.8073 | 0.8365 | 0.7985 |
-| text+box | 0.6658 | 0.7864 | 0.8180 | 0.8033 | 0.7864 |
-| text+point | 0.6523 | 0.7755 | 0.7901 | 0.8189 | 0.7755 |
-| box+point | 0.6202 | 0.7360 | 0.7920 | 0.7535 | 0.7360 |
-| U-Net (sup.) | 0.6427 | 0.7637 | 0.8521 | 0.7359 | 0.7637 |
-| DeepLabV3+ | 0.6298 | 0.7555 | 0.8463 | 0.7242 | 0.7555 |
-| YOLOv8-seg | 0.4155 | 0.5616 | 0.6102 | 0.5436 | 0.5616 |
+| point (nearest-fg) | 0.5199 | 0.6278 | 0.6229 | 0.7754 | 0.6278 |
+| ampf | 0.6671 | 0.7880 | 0.8126 | 0.8105 | 0.7880 |
+| no_detection | 0.6639 | 0.7844 | 0.8126 | 0.8076 | 0.7844 |
+| no_stability | 0.6691 | 0.7894 | 0.8149 | 0.8122 | 0.7894 |
+| no_boundary | 0.6605 | 0.7825 | 0.8055 | 0.8097 | 0.7825 |
+| no_alignment | 0.4676 | 0.5489 | 0.6690 | 0.5436 | 0.5489 |
+| fusion_max | 0.6746 | 0.7936 | 0.7640 | 0.8799 | 0.7936 |
+| **fusion_mean** | **0.6815** | **0.8012** | 0.8126 | 0.8332 | 0.8012 |
+| text+box | 0.6654 | 0.7860 | 0.8178 | 0.8027 | 0.7860 |
+| text+point | 0.6435 | 0.7688 | 0.7864 | 0.8134 | 0.7688 |
+| box+point | 0.6466 | 0.7645 | 0.8079 | 0.7812 | 0.7645 |
+| U-Net (sup.) | 0.6661 | 0.7855 | 0.8122 | 0.8042 | 0.7855 |
+| DeepLabV3+ | 0.6698 | 0.7906 | 0.8351 | 0.7815 | 0.7906 |
+| YOLOv8-seg | 0.4198 | 0.5652 | 0.6124 | 0.5457 | 0.5652 |
 
-> 完整 per-image 数据：`experiments/results/all_results.csv`（4176 行）
+> 完整 per-image 数据：`experiments/results/all_results_v2.csv`（4176 条结果；CSV 含表头共 4177 行）
 
 ---
 
@@ -162,9 +162,9 @@
 |------|--------|------|------|
 | SAM3/AMPF CrackForest (24张, 13组) | 1 | ~12 min | — |
 | SAM3/AMPF DeepCrack (50张, 13组) | 1 | ~45 min | — |
-| 监督基线 CrackForest (3 models) | 1 | ~17 min | 100 epochs each |
-| 监督基线 DeepCrack (3 models) | 1 | ~9 min | 100 epochs each |
-| **CrackForest + DeepCrack (50张) 全量** | 1 | **73.8 min** | `run_all.py` |
+| 监督基线 CrackForest (3 models) | 1 | ~17 min | U-Net/DeepLabV3+: 50 epochs; YOLOv8-seg: 100 epochs |
+| 监督基线 DeepCrack (3 models) | 1 | ~9 min | U-Net/DeepLabV3+: 50 epochs; YOLOv8-seg: 100 epochs |
+| **CrackForest + DeepCrack pilot/full-run entry** | 1 | **73.8 min** | `run_all.py` |
 | DeepCrack full (237张) groups 1-3 | 1 | ~89 min | text/box/point |
 | DeepCrack full (237张) groups 4-13 | 1 | **264.9 min** | ampf + 6 ablation + 3 combo |
 | **总实验时间** | — | **~7 小时** | 单进程安全模式 |
@@ -175,10 +175,10 @@
 
 ## 6. 核心发现
 
-1. **Text alone 就够了**：DeepCrack 上 Text IoU=0.666，超越全监督 U-Net (0.643)；AMPF 相对 Text 的边际改善为负或零
-2. **Alignment 是瓶颈**：去掉实例级对齐后，IoU 下降 25-33%（CrackForest: 0.425→0.329, DeepCrack: 0.665→0.442）
+1. **Text alone 是最强可部署基线**：DeepCrack 上 Text IoU=0.6658，与 U-Net (0.6661) 基本持平；AMPF 的可见收益很小且依赖 GT-assisted prompt/alignment
+2. **Alignment 是瓶颈**：去掉实例级对齐后，IoU 明显下降（CrackForest: 0.4145→0.3506, DeepCrack: 0.6671→0.4676）
 3. **简单融合 > 复杂加权**：等权平均 (`fusion=mean`) 在两个数据集均优于置信度加权 AMPF
-4. **Point 不适合裂缝**：Point 单模态 IoU 仅 0.117/0.313，且加入任何融合组合都会降低性能（注：centroid-derived point protocol 下；更强的 point protocol 可能得到不同结论）
+4. **Point protocol 修正后仍有限**：nearest-foreground point 将 Point IoU 提升到 0.301/0.520，但单点提示仍弱于 Text/Box，说明问题不只是 centroid 落背景，也包括裂缝细长、分叉和不连续几何
 5. **Precision-Recall 权衡**：AMPF 提升 Precision（0.744→0.812 on DC），但降低 Recall（0.885→0.811）——融合引入假阴性
 6. **零训练潜力**：无需任何裂缝标注数据即可获得与监督训练相当的 IoU
 
@@ -211,7 +211,7 @@
 ## 8. 复现步骤
 
 ```bash
-cd sam3-demo
+# from the submission project root: sam3-demo/
 uv venv .venv --python 3.11
 uv pip install -r backend/requirements.txt scipy pandas matplotlib \
     segmentation-models-pytorch --python .venv/bin/python
@@ -222,9 +222,8 @@ uv pip install -r backend/requirements.txt scipy pandas matplotlib \
 .venv/bin/python experiments/run_baselines.py --dataset deepcrack
 .venv/bin/python experiments/run_deepcrack_full.py --start 1 --end 13
 
-# 生成论文材料
-.venv/bin/python experiments/generate_tables.py
-.venv/bin/python experiments/generate_plots.py
+# 生成 v2 论文材料
+.venv/bin/python experiments/rebuild_paper_materials.py
 ```
 
 ---
@@ -232,32 +231,29 @@ uv pip install -r backend/requirements.txt scipy pandas matplotlib \
 ## 9. 项目文件结构
 
 ```
-/home/justin/workspace/cv_paper/
+sam3-demo/
 ├── README.md                            # 项目概览
-├── EXPERIMENTS.md                       # ← 本文件（实验完整记录）
-├── paper.md                             # 研究计划书
-├── paper_results/                       # 论文输出材料
-│   ├── all_results.csv                  # 4176 行全量结果
-│   ├── summary_stats.csv                # 汇总统计
-│   ├── paper_tables.tex                 # 4 个 LaTeX 表格
-│   ├── fig_main_comparison.png          # 主对比图
-│   ├── fig_ablation.png                 # 消融实验图
-│   ├── fig_supervised_comparison.png    # 监督对比图
-│   └── fig_mode_combinations.png        # 模态组合图
-├── experiments/                         # 实验代码与结果副本
-│   ├── results/                         # 所有独立 CSV 文件
-│   ├── visualizations/                  # 对比图和指标柱状图
+├── manuscript.md                        # 论文正文
+├── EXPERIMENTS.md                       # 本文件：实验完整记录
+├── POINT_PROTOCOL_FIX.md                # nearest-foreground point protocol 修正记录
+├── REVISION_NOTES.md                    # 第一轮导师意见修订记录
+├── manuscript_review_issues.md          # 导师式预审问题清单
+├── experiments/
+│   ├── results/
+│   │   ├── all_results_v2.csv           # 4176 条 per-image 结果
+│   │   ├── summary_stats_v2.csv         # 32 条 per-method 汇总
+│   │   ├── paper_tables_v2.tex          # 论文 LaTeX 表格
+│   │   └── point_experiments_v2.csv     # point 相关重跑汇总
+│   ├── visualizations/                  # v2 对比图和指标柱状图
 │   ├── datasets/                        # CrackForest + DeepCrack
+│   ├── tests/                           # prompt generation 等测试
+│   ├── prompt_generator.py              # box/point/text prompt 生成
 │   ├── run_all.py                       # 全量实验入口
 │   ├── run_deepcrack_full.py            # DeepCrack 237 张实验
 │   ├── run_baselines.py                 # 监督基线训练+评估
-│   ├── generate_tables.py               # LaTeX 表格生成
-│   ├── generate_plots.py                # matplotlib 图表生成
-│   └── *.log                            # 完整运行日志
-└── sam3-demo/                           # 上游代码仓库
-    ├── backend/app/services/
-    │   ├── ampf_engine.py               # AMPF 三阶段融合引擎
-    │   ├── segmentation_service.py      # SAM3 推理服务
-    │   └── model_manager.py             # SAM3 + YOLO 模型管理
-    └── experiments/                     # 原始实验目录
+│   └── rebuild_paper_materials.py       # v2 结果合并、LaTeX 表格与图表重建
+└── backend/app/services/
+    ├── ampf_engine.py                   # AMPF 三阶段融合引擎
+    ├── segmentation_service.py          # SAM3 推理服务
+    └── model_manager.py                 # SAM3 + YOLO 模型管理
 ```
