@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plot AMPF weight sensitivity heatmap (Fig. S2).
 
-Generates a triangular heatmap over valid (alpha, beta) pairs where gamma > 0.
+Generates a triangular heatmap over valid (alpha, beta) pairs where gamma >= 0.
 The current paper configuration (α=0.4, β=0.35, γ=0.25) is marked.
 
 Expected input:  experiments/results/ampf_weight_sensitivity.csv
@@ -44,7 +44,7 @@ def main() -> None:
 
     fig, ax = plt.subplots(figsize=(8, 6.5))
 
-    # Mask invalid combos (gamma <= 0)
+    # Mask invalid combos not present in the CSV.
     masked = np.ma.masked_invalid(heatmap)
 
     im = ax.imshow(masked, origin="lower", cmap="viridis", aspect="auto",
@@ -82,7 +82,7 @@ def main() -> None:
         g = 1.0 - a - b
         if g > 0:
             gamma_examples.append(f"γ={g:.1f}")
-    ax.text(0.75, 0.15, f"γ = 1 - α - β\nValid region: γ > 0",
+    ax.text(0.75, 0.15, f"γ = 1 - α - β\nValid region: γ ≥ 0",
             transform=ax.transAxes, fontsize=8, va="bottom", ha="left",
             bbox={"facecolor": "white", "alpha": 0.8, "pad": 3, "edgecolor": "lightgray"})
 
@@ -91,7 +91,7 @@ def main() -> None:
     # Add n_images note
     n_images = df["n_images"].iloc[0] if "n_images" in df.columns else "?"
     fig.text(0.5, 0.02, f"Based on {n_images} DeepCrack test images per weight combination. "
-             f"Triangular region: α + β + γ = 1, all weights > 0.",
+             f"Triangular region: α + β + γ = 1, with γ ≥ 0 boundary rows included.",
              ha="center", fontsize=8, style="italic")
 
     for fmt in ("png", "pdf"):

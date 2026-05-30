@@ -21,9 +21,9 @@
 | Fig. 2 | Per-Image IoU Distribution | 主文 Results | ✅ | Text 分布与 U-Net 接近 |
 | Fig. 3 | Precision-Recall Operating Points | 主文 Results | ✅ | AMPF 向高 precision/低 recall 移动 |
 | Fig. 4 | Qualitative Failure Mode Analysis | 主文 Results | ✅ | 4 类典型故障模式 |
-| Fig. S1 | Confidence Calibration Reliability Diagram | Supplementary | ✅ | ECE 0.29-0.47，置信度显著高估 IoU |
-| Fig. S2 | AMPF Weight Sensitivity Heatmap | Supplementary | ✅ | IoU 变异系数仅 0.87%，完全 plateau |
-| Fig. S3 | Inference Time vs Accuracy Scatter | Supplementary | ✅ | Text: 84ms/img, AMPF: 8866ms/img |
+| Fig. S1 | Confidence Calibration Reliability Diagram | Supplementary | ✅ | DeepCrack candidate-level ECE 0.29-0.47，置信度显著高估 IoU |
+| Fig. S2 | AMPF Weight Sensitivity Heatmap | Supplementary | ✅ | 30-image DeepCrack subset 中 IoU 变异系数仅 0.82%，呈 broad plateau |
+| Fig. S3 | Inference Time vs Accuracy Scatter | Supplementary | ✅ | 20-image DeepCrack profiling subset: Text 84ms/img, AMPF 8866ms/img |
 
 ---
 
@@ -69,20 +69,20 @@
 **Step 1 — 筛选典型案例**
 
 - 脚本: `experiments/find_representative_cases.py`
-- 数据源: `experiments/results/all_results_v2.csv` (4177 per-image rows)
+- 数据源: `experiments/results/all_results_v2.csv` (4176 per-image rows; 4177 CSV lines including header)
 - 方法: pivot table + 排名，找出每种 failure mode 的最佳样本
 
 **Step 2 — 生成 qualitative overlay**
 
 - 脚本: `experiments/generate_qualitative_figure.py`
-- 模型: `/home/justin/llm_models/facebook/sam3/sam3.pt`
+- 模型: `models/sam3/sam3.pt`
 - 数据集: `experiments/datasets/DeepCrack/` (test split)
 - 命令:
 
 ```bash
 .venv/bin/python experiments/generate_qualitative_figure.py \
   --datasets-dir experiments/datasets \
-  --model /home/justin/llm_models/facebook/sam3/sam3.pt \
+  --model models/sam3/sam3.pt \
   --case deepcrack:168 \
   --case deepcrack:86 \
   --case deepcrack:17 \
@@ -110,7 +110,7 @@
 - 4 行（对应 4 个典型样本）
 - Mask overlay: 半透明彩色 (alpha=0.45)
 - 输出: `experiments/visualizations/fig_qualitative_failure_modes.{png,pdf}`
-- 尺寸: 6270×5341px @ 300 DPI
+- 尺寸: 6270×3161px @ 300 DPI
 
 ### 3.4 论文中表述
 
@@ -140,7 +140,7 @@ Figure 4 的 caption 和正文明确声明:
 
 **Reliability Diagram 结构**
 
-- 两个子图: DeepCrack (n=237) / CrackForest (n=24，如有数据)
+- 单个 DeepCrack 子图 (n=237); 当前 candidate log 不含 CrackForest records
 - 横轴: mean predicted confidence (10 bins)
 - 纵轴: mean candidate IoU
 - 对角线: perfect calibration
@@ -162,7 +162,7 @@ Figure 4 的 caption 和正文明确声明:
 3. Box 的 correlation 最高 (r=0.82) 但 ECE 仍然较高 (0.36)
 4. Point 的校准最差 (ECE=0.47)，confidence 最高但 IoU 最低
 
-**论文可写结论**: "Across all prompt modes, composite confidence scores systematically overestimate per-candidate IoU. The Expected Calibration Error ranges from 0.29 (text) to 0.47 (point), indicating that the current confidence-weighting scheme is not reliably calibrated for crack segmentation. This evidence supports the ablation finding that removing components of the confidence-weighted fusion rule does not degrade—and sometimes improves—foreground IoU."
+**论文可写结论**: "On DeepCrack candidate-level diagnostics, composite confidence scores systematically overestimate per-candidate IoU. The Expected Calibration Error ranges from 0.29 (text) to 0.47 (point), indicating that the current confidence-weighting scheme is not reliably calibrated for this visible surface-crack benchmark. This evidence supports the ablation finding that removing components of the confidence-weighted fusion rule does not degrade—and sometimes improves—foreground IoU."
 
 ### 4.2 Fig. S2: AMPF Weight Sensitivity Heatmap
 
@@ -172,8 +172,8 @@ Figure 4 的 caption 和正文明确声明:
 - 设计: 两阶段缓存优化
   - Phase 1: 对 30 张 DeepCrack test 图像运行完整 SAM3 推理（text/box/point + stability/boundary scores），缓存到 pickle 文件
   - Phase 2: 对每个 (α, β) 组合，仅用 NumPy 重算 composite_confidence 和融合（无 SAM3 推理）
-- 网格: α ∈ {0.1, 0.2, ..., 0.7}, β ∈ {0.1, 0.2, ..., 0.7}, γ = 1-α-β > 0
-- 有效组合: 35 个 (28 个严格 > 0，7 个因浮点问题 γ≈0)
+- 网格: α ∈ {0.1, 0.2, ..., 0.7}, β ∈ {0.1, 0.2, ..., 0.7}, γ = 1-α-β ≥ 0
+- 有效组合: 39 个 (包含 γ=0 boundary combinations)
 - 耗时: Phase 1 ~11 分钟 (30 images), Phase 2 <1 秒
 
 **Heatmap 结构**
@@ -182,31 +182,31 @@ Figure 4 的 caption 和正文明确声明:
 - colormap: viridis, 颜色表示 DeepCrack mean foreground IoU
 - 标注当前 paper 配置 (α=0.4, β=0.35, γ=0.25)
 - 标注 best combo
-- 图注说明 γ = 1-α-β, γ > 0
+- 图注说明 γ = 1-α-β；γ=0 边界组合用于网格完整性
 
 **实验结果**
 
 | 指标 | 值 |
 |---|---|
 | IoU 范围 | 0.5303 — 0.5484 |
-| IoU 标准差 | 0.0047 |
-| 变异系数 (CV) | 0.87% |
+| IoU 标准差 | 0.0044 |
+| 变异系数 (CV) | 0.82% |
 | Best combo | α=0.5, β=0.1, γ=0.4 (IoU=0.5484) |
-| Corr(IoU, α) | +0.038 (detection weight 几乎无影响) |
-| Corr(IoU, β) | -0.664 (stability weight 与 IoU 负相关) |
-| Corr(IoU, γ) | +0.560 (boundary weight 与 IoU 正相关) |
+| Corr(IoU, α) | +0.090 (detection weight 影响较弱) |
+| Corr(IoU, β) | -0.716 (stability weight 与 IoU 负相关) |
+| Corr(IoU, γ) | +0.541 (boundary weight 与 IoU 正相关) |
 | 附近网格点 (α=0.4, β=0.3) | IoU=0.5386 |
 | 附近网格点 (α=0.4, β=0.4) | IoU=0.5367 |
 
 **关键发现**
 
-1. **完整 plateau**: IoU 变异系数仅 0.87%，AMPF 对权重配置极不敏感
-2. **β 的负面影响**: 稳定性权重与 IoU 呈 -0.664 负相关——增加稳定性权重会降低性能。这与 ablation 中 "removing stability improves IoU" 一致
+1. **Broad plateau**: 在 30-image DeepCrack sensitivity subset 中，IoU 变异系数仅 0.82%，AMPF 对权重配置不敏感
+2. **β 的负面影响**: 稳定性权重与 IoU 呈 -0.716 负相关——增加稳定性权重会降低性能。这与 ablation 中 "removing stability improves IoU" 一致
 3. **γ 的正面影响**: 边界梯度分数是三项中最有用的置信度分量
 4. **当前配置在 plateau 内**: (0.4, 0.35, 0.25) 附近 IoU 约 0.537，与最优值 (0.548) 差距仅 0.011
 5. 文本同义词 ("fracture", "fissure", "break") 可能改变了语义而非保持稳定的目标概念，导致 stability score 对于裂缝分割不可靠
 
-**论文可写结论**: "Weight sensitivity analysis across 35 valid (α, β) combinations shows that the foreground IoU varies by less than 1% (CV = 0.87%), forming a broad plateau. The stability weight β is negatively correlated with IoU (r = -0.66), consistent with the ablation result that text-synonym perturbations do not preserve stable crack concepts. The boundary score γ is the most informative confidence component (r = +0.56). These results indicate that the AMPF fusion weights themselves are not the primary limitation; the plateau persists even at the best-observed weight configuration."
+**论文可写结论**: "On a 30-image DeepCrack sensitivity subset, weight analysis across 39 (α, β) combinations shows that the foreground IoU varies by less than 1% (CV = 0.82%), forming a broad plateau. The stability weight β is negatively correlated with IoU (r = -0.72), consistent with the ablation result that text-synonym perturbations do not preserve stable crack concepts. The boundary score γ is the most informative confidence component (r = +0.54). These results indicate that, within the tested grid, the AMPF fusion weights themselves are not the primary limitation; the plateau persists even at the best-observed weight configuration."
 
 **Pending (optional)**:
 - If needed, can also add CrackForest heatmap, but 24 images likely produce unreliable results
@@ -241,12 +241,12 @@ Figure 4 的 caption 和正文明确声明:
 
 1. **Text 是 accuracy-efficiency sweet spot**: 84 ms/img + IoU 0.68，远超其他 SAM3 方法
 2. **Box 最快但不准**: 75 ms/img 但 IoU 仅 0.37（全局前景 box 包含大量背景）
-3. **Point 效率最差**: ~3s/img 且 IoU 最低 (0.29)，因为每个 GT 实例单独调用 + stability perturbations
+3. **Point 效率最差**: ~3s/img 且 IoU 最低 (0.29)，因为每个 GT connected component 需要单独 point-prompt 调用
 4. **AMPF 最慢**: ~9s/img，主要开销来自 stability perturbations (每个 candidate 需额外 5-14 次推理)
 5. **Mean Fusion 比 AMPF 快 2.7×**: 因为不需要 stability 计算，仅用 alignment + unweighted average fusion
 6. 高方差主要来自不同图像 GT 实例数量差异（多实例图像 point prompts 更多）
 
-**论文可写结论**: "Text prompting achieves the best accuracy-efficiency trade-off at 84 ms/image with foreground IoU of 0.68 on DeepCrack. The full AMPF pipeline requires approximately 8.9 s/image due to stability perturbation overhead, while the simpler mean fusion variant reduces this to 3.2 s/image. The large standard deviations reflect variability in the number of ground-truth connected components per image, which determines the number of point prompts and corresponding stability re-runs."
+**论文可写结论**: "On a 20-image DeepCrack profiling subset, text prompting achieves the best accuracy-efficiency trade-off at 84 ms/image with foreground IoU of 0.68. The full AMPF pipeline requires approximately 8.9 s/image due to stability perturbation overhead, while the simpler mean fusion variant reduces this to 3.2 s/image. The large standard deviations reflect variability in the number of ground-truth connected components per image, which determines the number of point prompts; stability re-runs add further overhead for AMPF."
 
 **Pending (optional)**:
 - Supervised baselines timing data not collected (training time ≠ inference time)
@@ -260,16 +260,16 @@ Figure 4 的 caption 和正文明确声明:
 
 ### 5.1 可以写的强结论（有实验支撑）
 
-1. **"Composite confidence scores are not well calibrated for crack segmentation."**
+1. **"Composite confidence scores are not well calibrated on DeepCrack candidate-level diagnostics."**
    - 支撑: Fig. S1, ECE 0.29-0.47 across modes, confidence systematically overestimates IoU
 
-2. **"The stability perturbation component (β) is negatively correlated with fusion quality for crack-like structures."**
-   - 支撑: Fig. S2, r = -0.66; ablation no_stability versus AMPF
+2. **"The stability perturbation component (β) is negatively correlated with fusion quality in the 30-image DeepCrack sensitivity subset."**
+   - 支撑: Fig. S2, r = -0.72; ablation no_stability versus AMPF
 
-3. **"AMPF performance is insensitive to the specific choice of fusion weights within a broad plateau."**
-   - 支撑: Fig. S2, CV = 0.87% across 35 weight combinations
+3. **"AMPF performance is insensitive to the specific choice of fusion weights within the tested DeepCrack grid."**
+   - 支撑: Fig. S2, CV = 0.82% across 39 weight combinations
 
-4. **"Text-prompt inference is the accuracy-efficiency sweet spot at 84 ms/image."**
+4. **"Text-prompt inference is the best accuracy-efficiency trade-off among the profiled SAM3 protocols."**
    - 支撑: Fig. S3
 
 ### 5.2 仍然不应写的内容
@@ -301,17 +301,17 @@ Figure 4 的 caption 和正文明确声明:
 | `experiments/visualizations/fig_iou_distribution.pdf` | 90K |
 | `experiments/visualizations/fig_precision_recall_operating_points.png` | 325K |
 | `experiments/visualizations/fig_precision_recall_operating_points.pdf` | 33K |
-| `experiments/visualizations/fig_qualitative_failure_modes.png` | 6.4M |
-| `experiments/visualizations/fig_qualitative_failure_modes.pdf` | 8.1M |
+| `experiments/visualizations/fig_qualitative_failure_modes.png` | 3.4M |
+| `experiments/visualizations/fig_qualitative_failure_modes.pdf` | 3.4M |
 
 ### Supplementary Figures
 
 | 文件 | 大小 |
 |---|---|
-| `experiments/visualizations/fig_calibration_reliability.png` | 289K |
-| `experiments/visualizations/fig_calibration_reliability.pdf` | 28K |
-| `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.png` | 213K |
-| `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.pdf` | 64K |
+| `experiments/visualizations/fig_calibration_reliability.png` | 223K |
+| `experiments/visualizations/fig_calibration_reliability.pdf` | 27K |
+| `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.png` | 191K |
+| `experiments/visualizations/fig_ampf_weight_sensitivity_heatmap.pdf` | 60K |
 | `experiments/visualizations/fig_runtime_accuracy_scatter.png` | 164K |
 | `experiments/visualizations/fig_runtime_accuracy_scatter.pdf` | 18K |
 
@@ -319,10 +319,10 @@ Figure 4 的 caption 和正文明确声明:
 
 | 文件 | 内容 |
 |---|---|
-| `experiments/results/all_results_v2.csv` | 4177 per-image rows, all methods |
-| `experiments/results/candidate_confidence.csv` | 3449 candidates, 237 images, per-candidate scores |
-| `experiments/results/ampf_weight_sensitivity.csv` | 35 weight combos, mean metrics |
-| `experiments/results/runtime_profiling.csv` | 5 methods, ms/image + IoU |
+| `experiments/results/all_results_v2.csv` | 4176 per-image rows, all methods |
+| `experiments/results/candidate_confidence.csv` | 3449 DeepCrack candidates, 237 images, per-candidate scores |
+| `experiments/results/ampf_weight_sensitivity.csv` | 39 weight combos on 30 DeepCrack images, mean metrics |
+| `experiments/results/runtime_profiling.csv` | 5 methods on 20 timed DeepCrack images, ms/image + IoU |
 
 ### 新增脚本
 
@@ -383,7 +383,7 @@ Figure 4 的 caption 和正文明确声明:
 
 - [x] `run_candidate_logging.py` — 3449 candidates, 237 images
 - [x] `plot_calibration.py` — reliability diagram + ECE
-- [x] `run_weight_sensitivity.py` — 35 weight combos, 30 images, caching optimization
+- [x] `run_weight_sensitivity.py` — 39 weight combos, 30 images, caching optimization
 - [x] `plot_weight_sensitivity.py` — triangular heatmap
 - [x] `run_profiling.py` — 5 methods, per-image timing
 - [x] `plot_runtime_accuracy.py` — accuracy-efficiency scatter

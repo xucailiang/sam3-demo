@@ -1,0 +1,64 @@
+{
+  "source": {
+    "markdown": "manuscript_revised_protocol_aware.md",
+    "pdf": "Protocol-Aware_Evaluation_of_SAM3_Crack_Segmentation.pdf"
+  },
+  "review_blocks": [
+    {
+      "id": "R001",
+      "type": "overall_assessment",
+      "markdown_lines": [5, 29],
+      "pdf_pages": [1, 2],
+      "evidence": "Abstract and introduction position the paper as protocol-aware evaluation with conservative deployment claims."
+    },
+    {
+      "id": "R002",
+      "type": "pdf_layout_issue",
+      "markdown_lines": [76, 78, 188, 190, 221, 223, 278, 280, 288, 290, 292, 294, 296, 298],
+      "pdf_pages": [4, 8, 9, 12, 13, 14, 15],
+      "evidence": "PDF text extraction shows auto-generated captions such as 'Figure 1: Figure 1...' and supplementary figures auto-numbered as Figure 5-7 while captions say Figure S1-S3."
+    },
+    {
+      "id": "R003",
+      "type": "placeholder_issue",
+      "markdown_lines": [406, 408],
+      "pdf_pages": [19],
+      "evidence": "Author Contributions remains '[To be completed according to the final author list.]'."
+    },
+    {
+      "id": "R004",
+      "type": "protocol_interpretation",
+      "markdown_lines": [69, 74, 211, 217, 231, 239, 261, 274],
+      "pdf_pages": [3, 8, 9, 10, 11],
+      "evidence": "Automatic, GT-derived, GT-assisted, and supervised protocols are mixed in some result tables; protocol caveats are present but table emphasis can still be misread."
+    },
+    {
+      "id": "R005",
+      "type": "method_detail_gap",
+      "markdown_lines": [106, 126, 290, 298, 318, 320],
+      "pdf_pages": [5, 13, 15, 16],
+      "evidence": "Stability perturbations, ECE definition, and runtime measurement details need fuller reproducibility description."
+    },
+    {
+      "id": "R006",
+      "type": "availability_gap",
+      "markdown_lines": [364, 404],
+      "pdf_pages": [18, 19],
+      "evidence": "Data and Code Availability lists local result files and scripts but lacks formal dataset URLs/licenses, repository/supplement location, checkpoint handling, and included/excluded artifacts."
+    },
+    {
+      "id": "R007",
+      "type": "verified_result_consistency",
+      "markdown_lines": [180, 184, 211, 217, 231, 239, 263, 270],
+      "pdf_pages": [7, 8, 9, 10, 11],
+      "evidence": "Core manuscript values match experiments/results/summary_stats_v2.csv after rounding."
+    },
+    {
+      "id": "R008",
+      "type": "verified_point_protocol",
+      "markdown_lines": [61, 63, 98, 198, 205, 342],
+      "pdf_pages": [3, 5, 7, 17],
+      "evidence": "experiments/prompt_generator.py implements nearest-foreground fallback; experiments/tests/test_prompt_generator.py includes concave-shape regression tests."
+    }
+  ]
+}

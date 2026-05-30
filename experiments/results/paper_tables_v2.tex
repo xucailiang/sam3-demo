@@ -36,20 +36,20 @@ fusion = mean & \textbf{0.4587} & \textbf{0.6192} & \textbf{0.6815} & \textbf{0.
 \end{tabular}
 \end{table}
 
-% Table 3: Comparison with supervised baselines
+% Table 3: Protocol-stratified comparison with supervised baselines
 \begin{table}[ht]
 \centering
-\caption{Training-free SAM3 vs. supervised baselines.}
-\begin{tabular}{lrrrr}
+\caption{Protocol-stratified comparison with supervised baselines. Bold values should be interpreted within protocol context only and do not indicate deployable superiority across automatic, GT-assisted, and supervised protocols.}
+\begin{tabular}{llrrrr}
 \toprule
-Method & CrackForest IoU & CrackForest Dice & DeepCrack IoU & DeepCrack Dice \\
+Method & Protocol & CrackForest IoU & CrackForest Dice & DeepCrack IoU & DeepCrack Dice \\
 \midrule
-Text & 0.4355 & 0.6000 & 0.6658 & 0.7866 \\
-AMPF & 0.4145 & 0.5737 & 0.6671 & 0.7880 \\
-fusion = mean & \textbf{0.4587} & 0.6192 & \textbf{0.6815} & \textbf{0.8012} \\
-U-Net & 0.4576 & \textbf{0.6236} & 0.6661 & 0.7855 \\
-DeepLabV3+ & 0.4384 & 0.6004 & 0.6698 & 0.7906 \\
-YOLOv8-seg & 0.3069 & 0.4533 & 0.4198 & 0.5652 \\
+Text & automatic text prompt & 0.4355 & 0.6000 & 0.6658 & 0.7866 \\
+AMPF & GT-assisted fusion diagnostic & 0.4145 & 0.5737 & 0.6671 & 0.7880 \\
+fusion = mean & GT-assisted fusion diagnostic & 0.4587 & 0.6192 & 0.6815 & 0.8012 \\
+U-Net & supervised train/val/test & 0.4576 & \textbf{0.6236} & 0.6661 & 0.7855 \\
+DeepLabV3+ & supervised train/val/test & 0.4384 & 0.6004 & 0.6698 & 0.7906 \\
+YOLOv8-seg & supervised train/val/test & 0.3069 & 0.4533 & 0.4198 & 0.5652 \\
 \bottomrule
 \end{tabular}
 \end{table}

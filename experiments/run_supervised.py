@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Train and evaluate U-Net and DeepLabV3+ supervised baselines.
 
-Results (2026-04-04, RTX 3090, 50 epochs, Adam lr=1e-4, BCE+Dice loss):
+Results used in manuscript_revised_protocol_aware.md
+(RTX 3090, 100 epochs, Adam lr=1e-4, BCE+Dice loss):
   CrackForest (train=94, test=24):
-    U-Net:      mIoU=0.4619  Dice=0.6252  P=0.6555  R=0.6245  F1=0.6252
-    DeepLabV3+: mIoU=0.4327  Dice=0.5900  P=0.5918  R=0.6672  F1=0.5900
+    U-Net:      foreground IoU=0.4576  Dice=0.6236  P=0.5464  R=0.7614  F1=0.6236
+    DeepLabV3+: foreground IoU=0.4384  Dice=0.6004  P=0.5911  R=0.6656  F1=0.6004
   DeepCrack (train=300, test=237):
-    U-Net:      mIoU=0.6562  Dice=0.7792  P=0.8232  R=0.7791  F1=0.7792
-    DeepLabV3+: mIoU=0.6618  Dice=0.7818  P=0.8128  R=0.7905  F1=0.7818
+    U-Net:      foreground IoU=0.6661  Dice=0.7855  P=0.8122  R=0.8042  F1=0.7855
+    DeepLabV3+: foreground IoU=0.6698  Dice=0.7906  P=0.8351  R=0.7815  F1=0.7906
 """
 
 import logging
@@ -65,7 +66,7 @@ def main():
             df.to_csv(out, index=False)
             logger.info("Saved %s (%d rows)", out.name, len(df))
             if not df.empty and "iou" in df.columns:
-                logger.info("  mIoU=%.4f  Dice=%.4f  F1=%.4f",
+                logger.info("  foreground IoU=%.4f  Dice=%.4f  F1=%.4f",
                     df["iou"].mean(), df["dice"].mean(), df["f1"].mean())
             else:
                 logger.warning("  Empty or malformed results for %s/%s", model_name, ds_name)

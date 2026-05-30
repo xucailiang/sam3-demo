@@ -1,0 +1,151 @@
+\begin{thebibliography}{999}
+
+\bibitem[Koch et~al.(2015)Koch, Georgieva, Kasireddy, Akinci, and
+  Fieguth]{koch2015}
+Koch, C.; Georgieva, K.; Kasireddy, V.; Akinci, B.; Fieguth, P.
+\newblock A Review on Computer Vision Based Defect Detection and Condition
+  Assessment of Concrete and Asphalt Civil Infrastructure.
+\newblock {\em Advanced Engineering Informatics} {\bf 2015}, {\em
+  29},~196--210.
+
+\bibitem[Sony et~al.(2019)Sony, Laventure, and Sadhu]{sony2019}
+Sony, S.; Laventure, S.; Sadhu, A.
+\newblock A Literature Review of Next-Generation Smart Sensing Technology in
+  Structural Health Monitoring.
+\newblock {\em Structural Control and Health Monitoring} {\bf 2019}, {\em
+  26},~e2321.
+
+\bibitem[Shi et~al.(2016)Shi, Cui, Qi, Meng, and Chen]{shi2016}
+Shi, Y.; Cui, L.; Qi, Z.; Meng, F.; Chen, Z.
+\newblock Automatic Road Crack Detection Using Random Structured Forests.
+\newblock {\em IEEE Transactions on Intelligent Transportation Systems} {\bf
+  2016}, {\em 17},~3434--3445.
+
+\bibitem[Liu et~al.(2019)Liu, Yao, Lu, Xie, and Li]{liu2019}
+Liu, Y.; Yao, J.; Lu, X.; Xie, R.; Li, L.
+\newblock DeepCrack: A Deep Hierarchical Feature Learning Architecture for
+  Crack Segmentation.
+\newblock {\em Neurocomputing} {\bf 2019}, {\em 338},~139--153.
+
+\bibitem[Yang et~al.(2020)Yang, Zhang, Yu, Prokhorov, Mei, and Ling]{yang2020}
+Yang, F.; Zhang, L.; Yu, S.; Prokhorov, D.; Mei, X.; Ling, H.
+\newblock Feature Pyramid and Hierarchical Boosting Network for Pavement Crack
+  Detection.
+\newblock {\em IEEE Transactions on Intelligent Transportation Systems} {\bf
+  2020}, {\em 21},~1525--1535.
+
+\bibitem[Zhang et~al.(2017)Zhang, Wang, Li, Yang, Dai, Peng, Fei, Liu, Li, and
+  Chen]{zhang2017}
+Zhang, A.; Wang, K.C.P.; Li, B.; Yang, E.; Dai, X.; Peng, Y.; Fei, Y.; Liu, Y.;
+  Li, J.Q.; Chen, C.
+\newblock Automated Pixel-Level Pavement Crack Detection on 3D Asphalt Surfaces
+  Using a Deep-Learning Network.
+\newblock {\em Computer-Aided Civil and Infrastructure Engineering} {\bf 2017},
+  {\em 32},~805--819.
+
+\bibitem[Cha et~al.(2017)Cha, Choi, and Buyukozturk]{cha2017}
+Cha, Y.J.; Choi, W.; Buyukozturk, O.
+\newblock Deep Learning-Based Crack Damage Detection Using Convolutional Neural
+  Networks.
+\newblock {\em Computer-Aided Civil and Infrastructure Engineering} {\bf 2017},
+  {\em 32},~361--378.
+
+\bibitem[Mei and Gul(2020)]{mei2020}
+Mei, Q.; Gul, M.
+\newblock Multi-Level Feature Fusion in Densely Connected Deep-Learning
+  Architecture and Depth-First Search for Crack Segmentation on Images
+  Collected with Smartphones.
+\newblock {\em Structural Health Monitoring} {\bf 2020}, {\em 19},~1726--1744.
+
+\bibitem[Long et~al.(2015)Long, Shelhamer, and Darrell]{long2015}
+Long, J.; Shelhamer, E.; Darrell, T.
+\newblock Fully Convolutional Networks for Semantic Segmentation.
+\newblock In Proceedings of the Proceedings of CVPR,  2015.
+
+\bibitem[Ronneberger et~al.(2015)Ronneberger, Fischer, and
+  Brox]{ronneberger2015}
+Ronneberger, O.; Fischer, P.; Brox, T.
+\newblock U-Net: Convolutional Networks for Biomedical Image Segmentation.
+\newblock In Proceedings of the Proceedings of MICCAI,  2015.
+
+\bibitem[Chen et~al.(2018)Chen, Zhu, Papandreou, Schroff, and Adam]{chen2018}
+Chen, L.C.; Zhu, Y.; Papandreou, G.; Schroff, F.; Adam, H.
+\newblock Encoder-Decoder with Atrous Separable Convolution for Semantic Image
+  Segmentation.
+\newblock In Proceedings of the Proceedings of ECCV,  2018.
+
+\bibitem[He et~al.(2017)He, Gkioxari, Dollar, and Girshick]{he2017}
+He, K.; Gkioxari, G.; Dollar, P.; Girshick, R.
+\newblock Mask R-CNN.
+\newblock In Proceedings of the Proceedings of ICCV,  2017.
+
+\bibitem[Xie and Tu(2015)]{xie2015}
+Xie, S.; Tu, Z.
+\newblock Holistically-Nested Edge Detection.
+\newblock In Proceedings of the Proceedings of ICCV,  2015.
+
+\bibitem[Kirillov et~al.(2023)Kirillov, Mintun, Ravi, Mao, Rolland, Gustafson,
+  Xiao, Whitehead, Berg, Lo, Doll{\\'a}r, and Girshick]{kirillov2023}
+Kirillov, A.; Mintun, E.; Ravi, N.; Mao, H.; Rolland, C.; Gustafson, L.; Xiao,
+  T.; Whitehead, S.; Berg, A.C.; Lo, W.Y.;  et~al.
+\newblock Segment Anything.
+\newblock In Proceedings of the Proceedings of ICCV,  2023.
+
+\bibitem[Ravi et~al.(2024)Ravi, Gabeur, Hu, Hu, Ryali, Ma, Khedr, Radle,
+  Rolland, Gustafson, et~al.]{ravi2024}
+Ravi, N.; Gabeur, V.; Hu, Y.T.; Hu, R.; Ryali, C.; Ma, T.; Khedr, H.; Radle,
+  R.; Rolland, C.; Gustafson, L.;  et~al.
+\newblock SAM 2: Segment Anything in Images and Videos,  2024,
+  \href{http://arxiv.org/abs/2408.00714}{{\normalfont [2408.00714]}}.
+
+\bibitem[Carion et~al.(2025)Carion, Gustafson, Hu, Debnath, Hu, Suris, Ryali,
+  Alwala, Khedr, Huang, et~al.]{carion2025}
+Carion, N.; Gustafson, L.; Hu, Y.T.; Debnath, S.; Hu, R.; Suris, D.; Ryali, C.;
+  Alwala, K.V.; Khedr, H.; Huang, A.;  et~al.
+\newblock SAM 3: Segment Anything with Concepts,  2025.
+\newblock arXiv preprint arXiv:2511.16719; revised 2026.
+
+\bibitem[{Ultralytics}()]{ultralyticsSAM3}
+{Ultralytics}.
+\newblock SAM 3: Segment Anything with Concepts.
+
+\bibitem[Liu et~al.(2023)Liu, Zeng, Ren, Li, Zhang, Yang, Jiang, Li, Yang, Su,
+  et~al.]{liu2023grounding}
+Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.; Jiang, Q.; Li, C.;
+  Yang, J.; Su, H.;  et~al.
+\newblock Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set
+  Object Detection,  2023,  \href{http://arxiv.org/abs/2303.05499}{{\normalfont
+  [2303.05499]}}.
+
+\bibitem[Gong et~al.(2023)Gong, Tesic, Tao, Luo, and Wang]{gong2023}
+Gong, H.; Tesic, J.; Tao, J.; Luo, X.; Wang, F.
+\newblock Automated Pavement Crack Detection with Deep Learning Methods: What
+  Are the Main Factors and How to Improve the Performance?
+\newblock {\em Transportation Research Record} {\bf 2023}.
+
+\bibitem[Yuan et~al.(2024)]{yuan2024}
+Yuan, J.;  et~al.
+\newblock A State-of-the-Art Survey of Deep Learning Models for Automated
+  Pavement Crack Segmentation.
+\newblock {\em International Journal of Transportation Science and Technology}
+  {\bf 2024}, {\em 13},~44--57.
+
+\bibitem[Yang et~al.(2018)Yang, Li, Yu, Luo, Huang, and Yang]{yang2018}
+Yang, X.; Li, H.; Yu, Y.; Luo, X.; Huang, T.; Yang, X.
+\newblock Automatic Pixel-Level Crack Detection and Measurement Using Fully
+  Convolutional Network.
+\newblock {\em Computer-Aided Civil and Infrastructure Engineering} {\bf 2018},
+  {\em 33},~1090--1109.
+
+\bibitem[Ma et~al.(2024)Ma, He, Li, Han, You, and Wang]{ma2024}
+Ma, J.; He, Y.; Li, F.; Han, L.; You, C.; Wang, B.
+\newblock Segment Anything in Medical Images.
+\newblock {\em Nature Communications} {\bf 2024}, {\em 15},~654.
+
+\bibitem[Owor et~al.(2024)Owor, Adu-Gyamfi, Aboah, and Amo-Boateng]{owor2024}
+Owor, N.J.; Adu-Gyamfi, Y.; Aboah, A.; Amo-Boateng, M.
+\newblock PaveSAM: Segment Anything for Pavement Distress.
+\newblock {\em Road Materials and Pavement Design} {\bf 2024}, pp. 1--25.
+\newblock arXiv:2409.07295.
+
+\end{thebibliography}

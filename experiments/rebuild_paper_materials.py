@@ -329,18 +329,27 @@ def build_latex_tables(summary: pd.DataFrame) -> str:
     lines.append(r"\end{table}")
     lines.append("")
 
-    # Table 3: Supervised comparison
+    # Table 3: Protocol-stratified supervised comparison
     methods_t3 = ["text", "ampf", "ablation_fusion_mean", "unet", "deeplabv3plus", "yolov8seg"]
     sub_cf3 = _get_metrics(summary, "crackforest", methods_t3)
     sub_dc3 = _get_metrics(summary, "deepcrack", methods_t3)
 
-    lines.append("% Table 3: Comparison with supervised baselines")
+    protocol_labels_t3 = {
+        "text": "automatic text prompt",
+        "ampf": "GT-assisted fusion diagnostic",
+        "ablation_fusion_mean": "GT-assisted fusion diagnostic",
+        "unet": "supervised train/val/test",
+        "deeplabv3plus": "supervised train/val/test",
+        "yolov8seg": "supervised train/val/test",
+    }
+
+    lines.append("% Table 3: Protocol-stratified comparison with supervised baselines")
     lines.append(r"\begin{table}[ht]")
     lines.append(r"\centering")
-    lines.append(r"\caption{Training-free SAM3 vs. supervised baselines.}")
-    lines.append(r"\begin{tabular}{lrrrr}")
+    lines.append(r"\caption{Protocol-stratified comparison with supervised baselines. Bold values should be interpreted within protocol context only and do not indicate deployable superiority across automatic, GT-assisted, and supervised protocols.}")
+    lines.append(r"\begin{tabular}{llrrrr}")
     lines.append(r"\toprule")
-    lines.append(r"Method & CrackForest IoU & CrackForest Dice & DeepCrack IoU & DeepCrack Dice \\")
+    lines.append(r"Method & Protocol & CrackForest IoU & CrackForest Dice & DeepCrack IoU & DeepCrack Dice \\")
     lines.append(r"\midrule")
     for m in methods_t3:
         label = TABLE_METHOD_LABELS.get(m, m)
@@ -349,10 +358,11 @@ def build_latex_tables(summary: pd.DataFrame) -> str:
             cf_dice = sub_cf3.loc[m, "dice"]
             dc_iou = sub_dc3.loc[m, "iou"]
             dc_dice = sub_dc3.loc[m, "dice"]
-            bf_cf = lambda v, col: f"\\textbf{{{v:.4f}}}" if v == sub_cf3[col].max() else f"{v:.4f}"
-            bf_dc = lambda v, col: f"\\textbf{{{v:.4f}}}" if v == sub_dc3[col].max() else f"{v:.4f}"
+            bf_cf = lambda v, col: f"\\textbf{{{v:.4f}}}" if m != "ablation_fusion_mean" and v == sub_cf3[col].drop(index=["ablation_fusion_mean"], errors="ignore").max() else f"{v:.4f}"
+            bf_dc = lambda v, col: f"\\textbf{{{v:.4f}}}" if m != "ablation_fusion_mean" and v == sub_dc3[col].drop(index=["ablation_fusion_mean"], errors="ignore").max() else f"{v:.4f}"
+            protocol = protocol_labels_t3.get(m, "")
             lines.append(
-                f"{label} & {bf_cf(cf_iou, 'iou')} & {bf_cf(cf_dice, 'dice')} & "
+                f"{label} & {protocol} & {bf_cf(cf_iou, 'iou')} & {bf_cf(cf_dice, 'dice')} & "
                 f"{bf_dc(dc_iou, 'iou')} & {bf_dc(dc_dice, 'dice')} \\\\"
             )
     lines.append(r"\bottomrule")

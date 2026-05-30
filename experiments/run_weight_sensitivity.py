@@ -8,7 +8,7 @@ recomputing composite_confidence and re-fusing from cached candidate data.
 Following PAPER_FIGURE_OPTIMIZATION_PLAN.md Sec 3.3:
   - alpha ∈ {0.1, 0.2, ..., 0.7}
   - beta  ∈ {0.1, 0.2, ..., 0.7}
-  - gamma = 1 - alpha - beta, filter gamma <= 0
+  - gamma = 1 - alpha - beta, retain gamma >= 0 boundary combinations
 
 Expected outputs:
   experiments/results/ampf_weight_sensitivity_cache/  (per-image candidate caches)
@@ -23,7 +23,7 @@ import pickle
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -75,17 +75,22 @@ async def cache_image_data(
 
     # Compute per-candidate scores
     all_cands_data = []
+    score_by_obj_id = {}
     for mode, cands in [("text", text_cands), ("box", box_cands), ("point", point_cands)]:
-        for c in cands:
+        for cand_idx, c in enumerate(cands):
             s_stab = await engine.compute_stability_score(image, c)
             s_bound = engine.compute_boundary_score(c.mask, image)
-            all_cands_data.append({
+            candidate_id = f"{mode}_{cand_idx:03d}"
+            cand_record = {
+                "candidate_id": candidate_id,
                 "mode": mode,
                 "mask": c.mask.copy(),
                 "detection_score": c.detection_score,
                 "stability_score": s_stab,
                 "boundary_score": s_bound,
-            })
+            }
+            all_cands_data.append(cand_record)
+            score_by_obj_id[id(c)] = cand_record
 
     # Stage 2: Alignment
     gt_instances = engine.extract_gt_instances(gt_mask)
@@ -98,9 +103,13 @@ async def cache_image_data(
         for role, cand in [("text", ai.text_candidate), ("box", ai.box_candidate),
                            ("point", ai.point_candidate)]:
             if cand is not None:
+                cand_scores = score_by_obj_id.get(id(cand), {})
                 inst_data[role] = {
+                    "candidate_id": cand_scores.get("candidate_id"),
                     "mask": cand.mask.copy(),
                     "detection_score": cand.detection_score,
+                    "stability_score": cand_scores.get("stability_score"),
+                    "boundary_score": cand_scores.get("boundary_score"),
                     "mode": cand.mode,
                 }
             else:
@@ -125,6 +134,45 @@ async def cache_image_data(
 # Phase 2: Fuse with different weights
 # ---------------------------------------------------------------------------
 
+def find_cached_scores(
+    cache: dict,
+    mode: str,
+    detection_score: float,
+    mask: np.ndarray,
+    candidate_id: Optional[str] = None,
+) -> tuple[float, float]:
+    """Return cached stability/boundary scores for one aligned candidate.
+
+    New caches store a stable candidate_id. Older caches do not, so the fallback
+    requires mask equality as well as mode and detection score to avoid selecting
+    the wrong candidate when SAM3 emits duplicate confidence values.
+    """
+    if candidate_id is not None:
+        for ac in cache["all_candidates"]:
+            if ac.get("candidate_id") == candidate_id:
+                return ac.get("stability_score", 0.0), ac.get("boundary_score", 0.0)
+
+    for ac in cache["all_candidates"]:
+        if ac["mode"] != mode:
+            continue
+        if ac["detection_score"] != detection_score:
+            continue
+        if np.array_equal(ac["mask"], mask):
+            return ac.get("stability_score", 0.0), ac.get("boundary_score", 0.0)
+
+    return 0.0, 0.0
+
+
+def reconstruct_gt_from_cache(cache: dict) -> np.ndarray:
+    """Reconstruct the image-level GT mask from cached aligned instances."""
+    h, w = cache["image_shape"]
+    gt_mask = np.zeros((h, w), dtype=np.uint8)
+    for ai_data in cache.get("aligned_instances", []):
+        if ai_data.get("gt_mask") is not None:
+            gt_mask = np.maximum(gt_mask, ai_data["gt_mask"].astype(np.uint8))
+    return gt_mask
+
+
 def fuse_with_weights(
     cache: dict,
     alpha: float,
@@ -139,34 +187,34 @@ def fuse_with_weights(
     """
     h, w = cache["image_shape"]
 
-    # Build candidate lookup: (mode, id) → precomputed scores
-    # We need to match aligned instance candidates to their precomputed scores
-    # For simplicity, recompute composite_confidence for each aligned candidate
-
     fused_masks: List[np.ndarray] = []
 
     for ai_data in cache["aligned_instances"]:
-        inst_cands: List[Tuple[np.ndarray, float, str]] = []  # (mask, detection_score, mode)
+        inst_cands: List[dict] = []
 
         for role in ["text", "box", "point"]:
             if ai_data.get(role) is not None:
                 cd = ai_data[role]
-                inst_cands.append((cd["mask"], cd["detection_score"], cd["mode"]))
+                inst_cands.append(cd)
 
         if not inst_cands:
             continue
 
         # Compute composite confidence for each candidate using cached scores
         scored: List[Tuple[np.ndarray, float]] = []
-        for mask, det_score, mode in inst_cands:
-            # Find matching precomputed scores
-            stab_score = 0.0
-            bound_score = 0.0
-            for ac in cache["all_candidates"]:
-                if ac["mode"] == mode and ac["detection_score"] == det_score:
-                    stab_score = ac.get("stability_score", 0.0)
-                    bound_score = ac.get("boundary_score", 0.0)
-                    break
+        for cd in inst_cands:
+            mask = cd["mask"]
+            det_score = cd["detection_score"]
+            stab_score = cd.get("stability_score")
+            bound_score = cd.get("boundary_score")
+            if stab_score is None or bound_score is None:
+                stab_score, bound_score = find_cached_scores(
+                    cache,
+                    cd["mode"],
+                    det_score,
+                    mask,
+                    cd.get("candidate_id"),
+                )
             comp_conf = alpha * det_score + beta * stab_score + gamma * bound_score
             scored.append((mask, comp_conf))
 
@@ -214,7 +262,8 @@ def generate_weight_combos() -> List[Tuple[float, float, float]]:
     for a in alphas:
         for b in betas:
             g = 1.0 - a - b
-            if g > 0:
+            if g >= -1e-12:
+                g = max(0.0, g)
                 combos.append((a, b, g))
     return combos
 
@@ -227,7 +276,7 @@ async def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--datasets-dir", default=str(SCRIPT_DIR / "datasets"))
-    parser.add_argument("--model", default="/home/justin/llm_models/facebook/sam3/sam3.pt")
+    parser.add_argument("--model", default=str(PROJECT_ROOT / "models" / "sam3" / "sam3.pt"))
     parser.add_argument("--max-images", type=int, default=30,
                         help="DeepCrack test subset size (0=all 237)")
     parser.add_argument("--seed", type=int, default=42)
@@ -235,29 +284,48 @@ async def main() -> None:
                         help="Skip Phase 1 if caches already exist")
     args = parser.parse_args()
 
-    # Init
-    os.environ["SAM3_MODEL_PATH"] = args.model
-    SAM3ModelManager.reset_instance()
-    model_manager = SAM3ModelManager(model_path=args.model)
-    seg_service = SegmentationService(model_manager=model_manager)
-    cfg = AMPFConfig(random_seed=args.seed)
-    engine = AMPFEngine(seg_service, cfg)
-
     cache_dir = SCRIPT_DIR / "results" / "ampf_weight_sensitivity_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load dataset
-    root = Path(args.datasets_dir) / "DeepCrack"
-    full_dataset = CrackDataset("deepcrack", str(root)).get_split("test")
-    n_images = min(args.max_images, len(full_dataset)) if args.max_images > 0 else len(full_dataset)
-    print(f"DeepCrack test subset: {n_images} images")
-
-    # Pre-load images
     image_data = []
-    for idx in range(n_images):
-        image, gt_mask = full_dataset[idx]
-        prompts = PromptGenerator.generate_all_prompts(gt_mask)
-        image_data.append((image, gt_mask, prompts, f"deepcrack_{idx:04d}"))
+    engine = None
+
+    if args.skip_caching:
+        cache_paths = sorted(cache_dir.glob("deepcrack_*.pkl"))
+        if args.max_images > 0:
+            cache_paths = cache_paths[:args.max_images]
+        if not cache_paths:
+            raise FileNotFoundError(
+                f"No cached DeepCrack pickle files found in {cache_dir}. "
+                "Run without --skip-caching first."
+            )
+        for cache_path in cache_paths:
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+            image_id = cache.get("image_id", cache_path.stem)
+            gt_mask = reconstruct_gt_from_cache(cache)
+            image_data.append((None, gt_mask, None, image_id))
+        print(f"DeepCrack cached subset: {len(image_data)} images")
+    else:
+        # Init model only when Phase 1 caching is requested.
+        os.environ["SAM3_MODEL_PATH"] = args.model
+        SAM3ModelManager.reset_instance()
+        model_manager = SAM3ModelManager(model_path=args.model)
+        seg_service = SegmentationService(model_manager=model_manager)
+        cfg = AMPFConfig(random_seed=args.seed)
+        engine = AMPFEngine(seg_service, cfg)
+
+        # Load dataset
+        root = Path(args.datasets_dir) / "DeepCrack"
+        full_dataset = CrackDataset("deepcrack", str(root)).get_split("test")
+        n_images = min(args.max_images, len(full_dataset)) if args.max_images > 0 else len(full_dataset)
+        print(f"DeepCrack test subset: {n_images} images")
+
+        # Pre-load images
+        for idx in range(n_images):
+            image, gt_mask = full_dataset[idx]
+            prompts = PromptGenerator.generate_all_prompts(gt_mask)
+            image_data.append((image, gt_mask, prompts, f"deepcrack_{idx:04d}"))
 
     # ── Phase 1: Cache ──
     if not args.skip_caching:
@@ -265,6 +333,7 @@ async def main() -> None:
         t0 = time.time()
         for i, (image, gt_mask, prompts, image_id) in enumerate(image_data):
             try:
+                assert engine is not None
                 cache_path = await cache_image_data(
                     engine, image, gt_mask, prompts, image_id, cache_dir
                 )
@@ -327,6 +396,8 @@ async def main() -> None:
                 "mean_f1": np.mean([m["f1"] for m in combo_metrics]),
             }
             all_rows.append(mean_metrics)
+        else:
+            mean_metrics = {"mean_iou": float("nan")}
 
         elapsed = time.time() - t_combo
         total_elapsed = time.time() - t_start

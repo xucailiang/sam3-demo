@@ -176,7 +176,7 @@ def main(argv: Iterable[str] | None = None) -> None:
     parser.add_argument(
         "--case",
         action="append",
-        default=["crackforest:0", "deepcrack:0", "deepcrack:25"],
+        default=None,
         help="Representative case in dataset:index format; repeatable.",
     )
     parser.add_argument(
@@ -186,6 +186,8 @@ def main(argv: Iterable[str] | None = None) -> None:
     )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args(argv)
+    if args.case is None:
+        args.case = ["crackforest:0", "deepcrack:0", "deepcrack:25"]
     asyncio.run(build_figure(args))
 
 

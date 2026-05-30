@@ -68,18 +68,26 @@ def main() -> None:
     colors = {"text": "#1f77b4", "box": "#ff7f0e", "point": "#9467bd"}
     labels = {"text": "Text", "box": "Box", "point": "Point"}
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+    datasets = [
+        dataset
+        for dataset in ["deepcrack", "crackforest"]
+        if not df[df["dataset"] == dataset].empty
+    ]
+    if not datasets:
+        raise ValueError("No calibration records found for DeepCrack or CrackForest.")
+
+    fig, axes = plt.subplots(
+        1,
+        len(datasets),
+        figsize=(7 * len(datasets), 5.5),
+        squeeze=False,
+    )
+    axes = axes[0]
     n_bins = 10
 
-    for ax_idx, dataset in enumerate(["deepcrack", "crackforest"]):
+    for ax_idx, dataset in enumerate(datasets):
         ax = axes[ax_idx]
         ds_df = df[df["dataset"] == dataset]
-
-        if ds_df.empty:
-            ax.text(0.5, 0.5, f"{dataset}: no data", ha="center", va="center",
-                    transform=ax.transAxes, fontsize=12)
-            ax.set_title(dataset)
-            continue
 
         ece_text = ""
         for mode in ["text", "box", "point"]:

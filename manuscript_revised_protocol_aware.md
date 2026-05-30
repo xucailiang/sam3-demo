@@ -1,10 +1,18 @@
-# Protocol-Aware Evaluation of SAM3 Prompt Modes and Fusion Strategies for Training-Free Crack Segmentation in Smart Infrastructure Inspection
+---
+title: "Protocol-Aware Evaluation of SAM3 Prompt Modes and Fusion Strategies for Training-Free Crack Segmentation in Smart Infrastructure Inspection"
+author: "Xucai Liang\\textsuperscript{1,‡}, Dailing Jiang\\textsuperscript{1,‡} and Chendong Ma\\textsuperscript{1,*}"
+date: ""
+---
+
+\textsuperscript{1} Hong Kong Generative AI Research \& Development Center
+
+\textsuperscript{*} Correspondence: Chendong Ma, machendong\_intern@hkgai.org
+
+\textsuperscript{‡} These authors contributed equally to this work.
 
 ## Abstract
 
-Crack segmentation is a key perception task for smart infrastructure inspection, because visible surface cracks in pavements and concrete components provide early visual evidence of deterioration [1,2]. Supervised segmentation models can perform well, but they require pixel-level annotations and may need retraining when materials, cities, camera platforms, or environmental conditions change [3-8]. Promptable vision foundation models offer a different route: they can be queried at inference time using semantic or spatial prompts [14-18]. This paper presents a protocol-aware evaluation of Segment Anything Model 3 (SAM3), as implemented through the Ultralytics SAM3 interface, for training-free segmentation of visible surface cracks on CrackForest and DeepCrack.
-
-The study separates three types of evidence that are often conflated in promptable-segmentation experiments: deployable automatic text prompting, ground-truth-derived spatial prompt diagnostics, and ground-truth-assisted fusion diagnostics. A fixed text prompt, "crack", is the only fully automatic SAM3 prompt protocol in the experiments. It achieves mean foreground IoU/Dice of 0.4355/0.6000 on CrackForest and 0.6658/0.7866 on DeepCrack, matching the reference supervised U-Net baseline on DeepCrack within 0.0003 IoU and showing no significant paired difference from U-Net or DeepLabV3+ on that dataset. Ground-truth-derived box and point prompts underperform text prompting, even after correcting the point protocol so that every point lies on a foreground crack pixel. A confidence-weighted Adaptive Multi-Prompt Fusion (AMPF) pipeline improves precision relative to text prompting on DeepCrack, but it does not significantly improve foreground IoU. Under a ground-truth-assisted alignment protocol, simple mean fusion achieves the highest diagnostic IoU on both datasets, reaching 0.4587 on CrackForest and 0.6815 on DeepCrack, but this result is not directly deployable because it depends on ground-truth-derived prompts and instance matching. The main practical conclusion is conservative: on the evaluated visible surface-crack benchmarks, SAM3 text prompting is a strong deployable baseline for low-label screening and annotation support, while multi-prompt fusion should be treated as a diagnostic research direction unless automatic prompt generation and alignment are introduced.
+Crack segmentation is an important perception task for smart infrastructure inspection, but supervised crack-segmentation models depend on pixel-level annotations and may require retraining under domain shift. This study evaluates Segment Anything Model 3 (SAM3), as implemented through the Ultralytics SAM3 interface, for training-free visible surface-crack segmentation on CrackForest and DeepCrack. The experiments separate deployable automatic text prompting from ground-truth-derived spatial prompt diagnostics and ground-truth-assisted fusion diagnostics. A fixed text prompt, "crack", is the only fully automatic SAM3 protocol evaluated here. It achieves mean foreground IoU/Dice of 0.4355/0.6000 on CrackForest and 0.6658/0.7866 on DeepCrack, with no significant paired IoU difference from the reference U-Net or DeepLabV3+ baselines on DeepCrack. Ground-truth-derived box and point prompts underperform text prompting, even after correcting point prompts to lie on foreground crack pixels. Confidence-weighted Adaptive Multi-Prompt Fusion (AMPF) improves precision on DeepCrack but does not significantly improve foreground IoU. Simple mean fusion achieves the highest diagnostic IoU under ground-truth-assisted alignment, but it is not directly deployable. These findings support a bounded deployment claim: SAM3 text prompting is a competitive training-free baseline for low-label crack screening and annotation support, whereas multi-prompt fusion remains diagnostic until automatic prompt generation and alignment are introduced.
 
 **Keywords:** smart infrastructure inspection; crack segmentation; SAM3; promptable segmentation; vision foundation model; training-free segmentation; protocol-aware evaluation; infrastructure health monitoring
 
@@ -18,39 +26,39 @@ Promptable segmentation models change the design space. Instead of training a cr
 
 Visible surface cracks are a demanding test case for promptable segmentation. They are thin, elongated, branching, discontinuous, and often low contrast, even when they are visually apparent to a human inspector. A prompt mode that performs well on compact objects may fail on crack-like geometries. Prompt modes also differ structurally: text prompting searches globally for all matching concepts, box prompting constrains spatial extent, and point prompting provides local evidence for one or more instances. These outputs may differ in number, confidence calibration, and spatial coverage. Therefore, a fair evaluation must ask not only whether SAM3 can segment cracks in these public surface-crack benchmarks, but also which prompt protocols are deployable, which protocols use ground truth, and which apparent gains depend on diagnostic assistance.
 
-This paper evaluates SAM3 prompt modes and fusion strategies under explicit protocols. The study makes five contributions:
+This paper evaluates SAM3 prompt modes and fusion strategies under explicit protocols. The study contributes the following:
 
 1. It provides a controlled evaluation of SAM3 text, box, and point prompting for visible surface-crack segmentation on CrackForest and DeepCrack.
 2. It distinguishes deployable automatic text prompting from ground-truth-derived spatial prompt diagnostics and ground-truth-assisted fusion diagnostics.
-3. It evaluates an Adaptive Multi-Prompt Fusion (AMPF) pipeline with instance-level alignment, confidence-aware fusion, and targeted ablations.
-4. It shows that confidence-weighted AMPF changes the precision-recall trade-off but does not significantly improve foreground IoU over text prompting.
+3. It uses an Adaptive Multi-Prompt Fusion (AMPF)-style diagnostic pipeline to test whether aligned multi-prompt candidates contain complementary signal under known instance correspondence.
+4. It demonstrates that confidence-weighted AMPF changes the precision-recall trade-off but does not significantly improve foreground IoU over text prompting.
 5. It compares SAM3-based protocols with reference supervised baselines, while avoiding direct deployability claims for methods that use ground truth during prompt generation or alignment.
 
-The paper is intentionally conservative in its claims. The strongest deployable result is not the most complex fusion method, but the fixed text prompt. The fusion experiments are still valuable because they show that aligned multi-prompt information can contain additional diagnostic signal. However, they also show that fusion results must be interpreted through the protocol that produced them.
+The claims are intentionally bounded by protocol type. The fixed text prompt provides the best deployable SAM3 result in this study, whereas the fusion experiments assess whether aligned multi-prompt information contains additional diagnostic signal. Fusion results are therefore interpreted through the ground-truth assistance used to produce them.
 
-## 2. Related Work
+### 1.1 Related Work
 
-### 2.1 Crack Segmentation for Infrastructure Inspection
+#### 1.1.1 Crack Segmentation for Infrastructure Inspection
 
 Crack segmentation has long been studied as a pixel-level vision problem for pavement, concrete, and structural health monitoring [1-8,24-26]. Early approaches used edge detection, thresholding, morphological operations, filtering, and texture descriptors. These methods can be lightweight, but they are sensitive to illumination, shadows, stains, low contrast, and complex surface texture.
 
 Deep learning methods improved robustness by learning hierarchical visual features. U-Net and its variants remain common because skip connections preserve spatial detail [10]. DeepLabV3+ uses atrous spatial pyramid pooling and encoder-decoder refinement for multi-scale segmentation [11]. YOLO-style instance segmentation can provide efficient object-level masks, but thin cracks are challenging for detection-oriented pipelines. Crack-specific models such as CrackForest-based structured forests, DeepCrack, feature-pyramid boosting networks, and fully convolutional crack detectors further exploit crack geometry and multi-scale features [3-7,26]. Recent reviews and empirical studies emphasize that annotation cost, illumination variation, background texture, class imbalance, and cross-dataset generalization remain unresolved challenges [24,25]. These models are effective when trained and validated in-domain, but their dependence on labeled data limits fast deployment in new infrastructure contexts.
 
-### 2.2 Promptable Foundation Models
+#### 1.1.2 Promptable Foundation Models
 
 The Segment Anything family introduced promptable segmentation as a flexible visual interface [14]. SAM and SAM2 focused primarily on spatial or interactive prompting [14,15]. SAM3 adds promptable concept segmentation, where text or exemplar prompts can identify all instances of a visual concept in images or videos [16,18]. This capability is relevant to infrastructure inspection because defects such as cracks, spalling, corrosion, lane markings, and surface distress can be expressed as visual concepts. Recent SAM-based application studies in medical imaging and pavement distress inspection also show how promptable segmentation can reduce task-specific annotation requirements while exposing new protocol and domain-shift questions [19,20].
 
 However, open-vocabulary promptability does not guarantee task-level reliability. Crack segmentation requires fine spatial delineation of narrow structures, not only object discovery. The present study therefore evaluates SAM3 on foreground crack IoU, Dice, precision, and recall, rather than relying on generic foundation-model benchmarks.
 
-### 2.3 Multi-Prompt Fusion
+#### 1.1.3 Multi-Prompt Fusion
 
 Multi-prompt fusion aims to combine complementary information from different prompt types. Text prompts provide semantic intent and global search. Box prompts provide spatial constraint or exemplar-like information. Point prompts provide local instance cues. In practice, their outputs may be heterogeneous: one text prompt may return several masks, one box may cover multiple crack fragments, and one point may recover only a local segment. Naively unioning or averaging such outputs can introduce false positives, suppress true positives, or combine masks that refer to different objects.
 
-The AMPF pipeline evaluated in this paper addresses this by aligning candidates at the instance level before fusion. The key limitation is that the alignment used here is ground-truth-assisted. Consequently, AMPF and mean-fusion variants are not treated as deployable algorithms in their current form. They are diagnostic tools for understanding whether multi-prompt information could be useful if automatic proposal and alignment mechanisms were available.
+The AMPF pipeline evaluated here addresses this issue by aligning candidates at the instance level before fusion. The alignment used in this study is ground-truth-assisted. Consequently, AMPF and mean-fusion variants are treated as diagnostic protocols rather than deployable algorithms. They assess whether multi-prompt information contains complementary signal under known correspondence.
 
-## 3. Materials and Methods
+## 2. Materials and Methods
 
-### 3.1 Task Definition
+### 2.1 Task Definition
 
 Given an RGB image \(I \in \mathbb{R}^{H \times W \times 3}\) from a visible surface-crack benchmark, the task is to predict a binary crack mask \(M \in \{0,1\}^{H \times W}\). Predictions are compared with pixel-level ground-truth crack masks. The primary metric is mean foreground crack IoU, computed per image and averaged over the test set. Dice, precision, recall, and F1 are also reported.
 
@@ -60,26 +68,30 @@ The SAM3 prompt modes studied here produce different outputs:
 - **Box prompt:** a ground-truth-derived bounding rectangle around all foreground crack pixels is used as a spatial diagnostic prompt.
 - **Point prompt:** one positive point is generated for each ground-truth connected crack component. The component centroid is computed first; if the rounded centroid falls on background, the nearest foreground pixel in the same component is used.
 
-The point protocol is therefore foreground-guaranteed but still weak: one point per connected component may not capture the full extent of elongated, branching, or discontinuous cracks.
+The point protocol is therefore foreground-guaranteed but deliberately sparse: one point per connected component may not capture the full extent of elongated, branching, or discontinuous cracks.
 
-### 3.2 Prompt Protocols
+### 2.2 Prompt Protocols
 
-The experiments use an explicit `protocol` field. This field is central to interpretation.
+The experiments use an explicit protocol field. This field is central to interpretation. For readability in tables, the four protocol classes are abbreviated as P1-P4.
 
-| Protocol | Methods | Uses GT to Generate Prompt | Uses GT for Alignment | Interpretation |
-|---|---|---:|---:|---|
-| `automatic_text_prompt` | Text | No | No | Deployable training-free baseline |
-| `oracle_gt_prompt` | Box, Point | Yes | No | Ground-truth-derived spatial prompt diagnostic |
-| `oracle_gt_prompt_gt_alignment` | AMPF, ablations, prompt-mode combinations, mean fusion | Yes | Yes | Ground-truth-assisted fusion diagnostic |
-| `supervised_train_val_test` | U-Net, DeepLabV3+, YOLOv8-seg | Yes, during training | No | Reference supervised baseline |
+| Label | Protocol class | Methods | GT prompt | GT alignment |
+|---|---|---|---:|---:|
+| P1 | Automatic text | Text | No | No |
+| P2 | GT-derived prompt | Box, Point | Yes | No |
+| P3 | GT-assisted fusion | AMPF, ablations, prompt combinations, mean fusion | Yes | Yes |
+| P4 | Supervised baseline | U-Net, DeepLabV3+, YOLOv8-seg | Training labels | No |
 
-![Figure 1. Protocol hierarchy and deployability framework.](experiments/visualizations/fig_protocol_hierarchy.png)
+Table: Prompt-protocol labels used throughout the manuscript.
+
+The corresponding result-file protocol values are `automatic_text_prompt` (P1), `oracle_gt_prompt` (P2), `oracle_gt_prompt_gt_alignment` (P3), and `supervised_train_val_test` (P4).
+
+![](experiments/visualizations/fig_protocol_hierarchy.png)
 
 **Figure 1.** Protocol hierarchy and deployability framework used in this study. The text-prompt protocol is the only fully automatic SAM3 protocol. The deployable level refers to low-label screening and annotation support for imagery similar to the evaluated visible surface-crack benchmarks. Spatial prompts use ground-truth-derived prompt information, and fusion protocols additionally use ground-truth-assisted instance alignment; these latter protocols are diagnostic rather than directly deployable.
 
-This separation prevents a major misinterpretation. Text prompting is the only fully automatic SAM3 protocol in the experiments. Box, point, AMPF, and mean-fusion variants use ground truth either to generate prompts or to align candidates. They are useful for analysis, but they are not directly deployable without replacing ground-truth assistance with automatic proposals, interactive prompts, asset priors, or human-in-the-loop input.
+This separation is central to interpretation. Text prompting is the only fully automatic SAM3 protocol in the experiments. Box, point, AMPF, and mean-fusion variants use ground truth either to generate prompts or to align candidates. These protocols support diagnostic analysis, but they are not directly deployable unless ground-truth assistance is replaced by automatic proposals, interactive prompts, infrastructure-specific priors, or human-in-the-loop input.
 
-### 3.3 Prompt Generation
+### 2.3 Prompt Generation
 
 Text mode uses the fixed prompt:
 
@@ -97,21 +109,21 @@ This is a single image-level box, not a per-instance box protocol. It is therefo
 
 Point mode decomposes the ground-truth mask into connected components. For each component, the geometric centroid is rounded to the nearest pixel. If the pixel is foreground and belongs to the same component, it is used directly. Otherwise, the nearest foreground pixel in the component is selected by Euclidean distance. This corrected protocol avoids the artifact where centroids of concave or branching crack components fall on background.
 
-### 3.4 Adaptive Multi-Prompt Fusion
+### 2.4 Adaptive Multi-Prompt Fusion
 
 AMPF is a three-stage inference-time pipeline implemented in the project code.
 
-#### 3.4.1 Independent Prompting
+#### 2.4.1 Independent Prompting
 
-Text, box, and point prompts are executed independently. Text mode uses a SAM3 confidence threshold of 0.25. Point mode selects the highest-scoring mask when multiple masks are returned for a point prompt. Candidate masks are stored with their detection scores and prompt mode.
+Text, box, and point prompts are executed independently. Text mode uses a fixed SAM3 confidence threshold of 0.25 for all experiments; this threshold was set before the final evaluation and was not tuned per dataset. Point mode selects the highest-scoring mask when multiple masks are returned for a point prompt. Candidate masks are stored with their detection scores and prompt mode.
 
-#### 3.4.2 Ground-Truth-Assisted Instance Alignment
+#### 2.4.2 Ground-Truth-Assisted Instance Alignment
 
 The ground-truth mask is decomposed into connected components. For each ground-truth instance, text and box candidates are matched by selecting the candidate with the highest IoU above 0.1. Point candidates are matched by prompt order and checked by IoU. This produces an aligned candidate set for each crack instance.
 
-This stage is explicitly diagnostic. It isolates the fusion problem under known instance correspondence. It should not be described as a fully automatic deployment algorithm.
+This stage is diagnostic. It isolates the fusion problem under known instance correspondence and is not a fully automatic deployment algorithm.
 
-#### 3.4.3 Confidence-Aware Fusion
+#### 2.4.3 Confidence-Aware Fusion
 
 For each aligned candidate, AMPF computes:
 
@@ -125,7 +137,7 @@ where \(\alpha = 0.4\), \(\beta = 0.35\), and \(\gamma = 0.25\).
 
 Candidates below confidence 0.5 are filtered. If all candidates are below threshold, the highest-confidence candidate is retained. Remaining masks are fused by confidence-weighted pixel averaging, binarized at 0.5, and post-processed by morphological closing followed by opening with a 3 by 3 elliptical kernel. Per-instance fused masks are combined by logical OR.
 
-### 3.5 Evaluation Metrics
+### 2.5 Evaluation Metrics
 
 For a prediction \(P\) and ground truth \(G\), the evaluation computes:
 
@@ -148,13 +160,13 @@ F1 = \frac{2 \cdot \text{Precision} \cdot \text{Recall}}{\text{Precision} + \tex
 
 All masks are binarized before metric computation. IoU is reported as per-image foreground crack IoU averaged over the test set, not as class-averaged semantic-segmentation mIoU including background. Dice and F1 are numerically identical in this binary pixel setting, so the main tables emphasize IoU, Dice, precision, and recall.
 
-### 3.6 Statistical Analysis
+### 2.6 Statistical Analysis
 
-Where paired comparisons are reported, per-image IoU values are matched by `image_id`. Wilcoxon signed-rank tests are used as descriptive non-parametric paired tests. Statistical results are interpreted cautiously because protocols differ in deployability and CrackForest contains only 24 test images.
+Where paired comparisons are reported, per-image IoU values are matched by `image_id`. Wilcoxon signed-rank tests are used as descriptive non-parametric paired tests. Paired rank-biserial correlation is reported as an effect-size measure, with positive values indicating that the first method in the comparison tends to have higher per-image IoU. Statistical results are interpreted cautiously because protocols differ in deployability and CrackForest contains only 24 test images. Because multiple paired comparisons are reported, p-values are treated as descriptive unless explicitly adjusted; practical interpretation is based on protocol type, mean and median paired differences, and effect magnitude rather than statistical significance alone.
 
-## 4. Experimental Setup
+### 2.7 Experimental Setup
 
-### 4.1 Datasets
+#### 2.7.1 Datasets
 
 Two public crack datasets are used.
 
@@ -163,37 +175,49 @@ Two public crack datasets are used.
 | CrackForest | 118 labeled pairs | 480 by 320 | 60/20/20 random split, seed 42 | 24 | Visible pavement surface cracks |
 | DeepCrack | 537 labeled pairs | Multi-scale | Official test split; train split divided 80/20 for train/validation | 237 | Visible surface cracks in pavement, bridge, and concrete scenes |
 
+Table: Public crack-segmentation datasets and evaluation splits used in this study.
+
 CrackForest ground truth is loaded from MATLAB files where crack pixels correspond to the segmentation label used in the loader. DeepCrack labels are loaded from PNG masks and binarized at threshold 127. Validation tests check that train, validation, and test splits are disjoint.
 
-### 4.2 Implementation Environment
+#### 2.7.2 Implementation Environment
 
 Experiments were run with an NVIDIA GeForce RTX 3090 GPU with 24 GB VRAM, CUDA-enabled PyTorch, Ultralytics SAM3, and `sam3.pt` in half precision. The primary result file contains 4176 per-image rows.
 
-The supervised baselines include U-Net, DeepLabV3+, and YOLOv8-seg. U-Net and DeepLabV3+ use `segmentation_models_pytorch` with ResNet-34 encoders initialized from ImageNet weights, trained for 50 epochs with Adam and a combined BCE+Dice loss. YOLOv8-seg uses the Ultralytics training interface after converting masks to polygon annotations, trained for 100 epochs with default YOLO settings. These are reference baselines, not exhaustively tuned state-of-the-art systems.
+The supervised baselines include U-Net, DeepLabV3+, and YOLOv8-seg. U-Net and DeepLabV3+ use `segmentation_models_pytorch` with ResNet-34 encoders initialized from ImageNet weights, trained for 100 epochs with Adam and a combined BCE+Dice loss. YOLOv8-seg uses the Ultralytics training interface after converting masks to polygon annotations, trained for 100 epochs with default YOLO settings. These are reference baselines, not exhaustively tuned state-of-the-art systems.
 
-## 5. Results
+## 3. Results
 
-### 5.1 Deployable Text Prompting
+### 3.1 Deployable Text Prompting
 
-Text prompting is the strongest single prompt mode on both datasets and is the only fully automatic SAM3 prompt protocol in the study.
+Text prompting is the best-performing single prompt mode on both datasets and is the only fully automatic SAM3 prompt protocol in the study. Protocol labels follow Section 2.2.
 
-| Method | Protocol | CrackForest IoU | CrackForest Dice | CrackForest Precision | CrackForest Recall | DeepCrack IoU | DeepCrack Dice | DeepCrack Precision | DeepCrack Recall |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Text | automatic text prompt | **0.4355** | **0.6000** | 0.4525 | **0.9237** | **0.6658** | **0.7866** | 0.7441 | **0.8854** |
-| Box | GT-derived prompt | 0.3439 | 0.4786 | 0.3597 | 0.8132 | 0.5408 | 0.6441 | 0.6603 | 0.7516 |
-| Point | GT-derived prompt | 0.3014 | 0.4332 | 0.3445 | 0.7854 | 0.5199 | 0.6278 | 0.6229 | 0.7754 |
+| Method | Protocol | IoU | Dice | Precision | Recall |
+|---|---|---:|---:|---:|---:|
+| Text | P1 | **0.4355** | **0.6000** | 0.4525 | **0.9237** |
+| Box | P2 | 0.3439 | 0.4786 | 0.3597 | 0.8132 |
+| Point | P2 | 0.3014 | 0.4332 | 0.3445 | 0.7854 |
 
-Figure 2 shows the corresponding per-image IoU distributions for the deployable text prompt, diagnostic SAM3 protocols, and reference supervised baselines. The distribution view is important because CrackForest contains only 24 test images, while DeepCrack provides a larger paired test set.
+Table: CrackForest single-prompt results.
 
-![Figure 2. Per-image foreground IoU distributions.](experiments/visualizations/fig_iou_distribution.png)
+| Method | Protocol | IoU | Dice | Precision | Recall |
+|---|---|---:|---:|---:|---:|
+| Text | P1 | **0.6658** | **0.7866** | 0.7441 | **0.8854** |
+| Box | P2 | 0.5408 | 0.6441 | 0.6603 | 0.7516 |
+| Point | P2 | 0.5199 | 0.6278 | 0.6229 | 0.7754 |
+
+Table: DeepCrack single-prompt results.
+
+Figure 2 presents the corresponding per-image IoU distributions for the deployable text prompt, diagnostic SAM3 protocols, and reference supervised baselines. The distribution view is important because CrackForest contains only 24 test images, while DeepCrack provides a larger paired test set.
+
+![](experiments/visualizations/fig_iou_distribution.png)
 
 **Figure 2.** Per-image foreground IoU distributions on CrackForest and DeepCrack. AMPF and Mean Fusion are GT-assisted diagnostic protocols, so the paired p-values should be read as protocol-aware descriptive comparisons rather than deployability claims.
 
-The text prompt achieves high recall, which is valuable for inspection workflows where missed defects are costly. Its lower precision indicates over-segmentation of crack-like texture or background artifacts, suggesting that practical use should include review, post-processing, or secondary filtering.
+The text prompt achieves high recall, a desirable property for inspection workflows in which missed defects carry high cost. Its lower precision indicates over-segmentation of crack-like texture or background artifacts, suggesting that practical use should include review, post-processing, or secondary filtering.
 
-Box and point prompts underperform text prompting even though they use ground-truth-derived spatial information. This should not be interpreted as evidence that all spatial prompting is weak. The box protocol uses one global box around all foreground pixels, and the point protocol uses only one point per connected component. Both are diagnostic protocols, not optimized interactive prompt strategies.
+Box and point prompts underperform text prompting even though they use ground-truth-derived spatial information. This finding is specific to the protocols evaluated here. The box protocol uses one global box around all foreground pixels, and the point protocol uses only one point per connected component. Both are diagnostic protocols rather than optimized interactive prompt strategies.
 
-### 5.2 Point Protocol Correction
+### 3.2 Point Protocol Correction
 
 The nearest-foreground point protocol substantially improves point prompting relative to the earlier centroid-only protocol.
 
@@ -202,116 +226,141 @@ The nearest-foreground point protocol substantially improves point prompting rel
 | CrackForest | 0.1166 | 0.3014 | +0.1848 |
 | DeepCrack | 0.3129 | 0.5199 | +0.2070 |
 
-The gain shows that centroid misplacement was a real artifact. However, point prompting remains weaker than text and box prompting. The remaining gap likely reflects the geometry of cracks: a single point often recovers a local region rather than tracing a long, branching, or discontinuous crack.
+Table: Effect of correcting centroid-only point prompts to nearest-foreground point prompts.
 
-### 5.3 AMPF and Prompt-Mode Combinations
+The gain indicates that centroid misplacement was a substantial source of error. However, point prompting remains less accurate than text and box prompting. The remaining gap likely reflects crack geometry: a single point often recovers a local region rather than tracing a long, branching, or discontinuous crack.
+
+### 3.3 AMPF and Prompt-Mode Combinations
 
 Confidence-weighted AMPF does not significantly improve foreground IoU over text prompting. On DeepCrack it increases precision from 0.7441 to 0.8126, but recall decreases from 0.8854 to 0.8105.
 
 | Method | Protocol | CrackForest IoU | CrackForest Dice | DeepCrack IoU | DeepCrack Dice |
 |---|---|---:|---:|---:|---:|
-| Text | automatic text prompt | **0.4355** | **0.6000** | 0.6658 | 0.7866 |
-| AMPF | GT-assisted fusion diagnostic | 0.4145 | 0.5737 | **0.6671** | **0.7880** |
-| Text + Box | GT-assisted fusion diagnostic | 0.4282 | 0.5865 | 0.6654 | 0.7860 |
-| Text + Point | GT-assisted fusion diagnostic | 0.3972 | 0.5580 | 0.6435 | 0.7688 |
-| Box + Point | GT-assisted fusion diagnostic | 0.4012 | 0.5557 | 0.6466 | 0.7645 |
+| Text | P1 | **0.4355** | **0.6000** | 0.6658 | 0.7866 |
+| AMPF | P3 | 0.4145 | 0.5737 | **0.6671** | **0.7880** |
+| Text + Box | P3 | 0.4282 | 0.5865 | 0.6654 | 0.7860 |
+| Text + Point | P3 | 0.3972 | 0.5580 | 0.6435 | 0.7688 |
+| Box + Point | P3 | 0.4012 | 0.5557 | 0.6466 | 0.7645 |
 
-Figure 3 shows that AMPF mainly changes the precision-recall operating point rather than producing a stable foreground-IoU gain. On DeepCrack, AMPF moves from the high-recall text-prompt point toward higher precision and lower recall, while mean fusion gives a more balanced diagnostic operating point under GT-assisted alignment.
+Table: Prompt-mode combinations and confidence-weighted AMPF results.
 
-![Figure 3. Precision-recall operating points.](experiments/visualizations/fig_precision_recall_operating_points.png)
+Figure 3 indicates that AMPF mainly changes the precision-recall operating point rather than producing a stable foreground-IoU gain. On DeepCrack, AMPF moves from the high-recall text-prompt point toward higher precision and lower recall, while mean fusion gives a more balanced diagnostic operating point under GT-assisted alignment.
+
+![](experiments/visualizations/fig_precision_recall_operating_points.png)
 
 **Figure 3.** Precision-recall operating points for SAM3 protocols and supervised baselines. Arrows show the descriptive movement from Text to GT-assisted AMPF and Mean Fusion; they do not indicate a deployable processing chain.
 
-Adding point candidates generally reduces performance under confidence-weighted fusion. This suggests that improved point masks are still not reliably beneficial under the current weighted fusion rule. Weak prompt modes can degrade a strong text baseline when their confidence scores are overweighted.
+Adding point candidates generally reduces performance under confidence-weighted fusion. Improved point masks therefore do not reliably benefit the current weighted fusion rule. Lower-performing prompt modes can degrade the text baseline when their confidence scores are overweighted.
 
-### 5.4 Ablation Study
+### 3.4 Ablation Study
 
-The ablation study shows that alignment is the most important component, while the current confidence weighting is not consistently beneficial.
+The ablation study identifies alignment as the most important component, while the current confidence weighting is not consistently beneficial. All rows in this ablation table use the GT-assisted fusion protocol P3.
 
-| Configuration | Protocol | CrackForest IoU | CrackForest Dice | DeepCrack IoU | DeepCrack Dice |
-|---|---|---:|---:|---:|---:|
-| AMPF | GT-assisted fusion diagnostic | 0.4145 | 0.5737 | 0.6671 | 0.7880 |
-| without \(S_{\text{det}}\) | GT-assisted fusion diagnostic | 0.4087 | 0.5668 | 0.6639 | 0.7844 |
-| without \(S_{\text{stab}}\) | GT-assisted fusion diagnostic | 0.4279 | 0.5848 | 0.6691 | 0.7894 |
-| without \(S_{\text{bound}}\) | GT-assisted fusion diagnostic | 0.4122 | 0.5718 | 0.6605 | 0.7825 |
-| without alignment | GT-assisted fusion diagnostic | 0.3506 | 0.4847 | 0.4676 | 0.5489 |
-| fusion = max | GT-assisted fusion diagnostic | 0.4084 | 0.5699 | 0.6746 | 0.7936 |
-| fusion = mean | GT-assisted fusion diagnostic | **0.4587** | **0.6192** | **0.6815** | **0.8012** |
+| Configuration | CF IoU | CF Dice | DC IoU | DC Dice |
+|---|---:|---:|---:|---:|
+| AMPF | 0.4145 | 0.5737 | 0.6671 | 0.7880 |
+| without \(S_{\text{det}}\) | 0.4087 | 0.5668 | 0.6639 | 0.7844 |
+| without \(S_{\text{stab}}\) | 0.4279 | 0.5848 | 0.6691 | 0.7894 |
+| without \(S_{\text{bound}}\) | 0.4122 | 0.5718 | 0.6605 | 0.7825 |
+| without alignment | 0.3506 | 0.4847 | 0.4676 | 0.5489 |
+| fusion = max | 0.4084 | 0.5699 | 0.6746 | 0.7936 |
+| fusion = mean | **0.4587** | **0.6192** | **0.6815** | **0.8012** |
+
+Table: Ablation study for the GT-assisted fusion protocol.
 
 Removing alignment reduces DeepCrack IoU by 0.1995, from 0.6671 to 0.4676. On CrackForest, the mean reduction is 0.0638, but the paired test is not significant at the 0.05 level because the test set is small and many paired differences are zero.
 
-The strongest fusion result is simple mean fusion, not confidence-weighted AMPF. Mean fusion improves foreground IoU over text prompting by 0.0232 on CrackForest and 0.0157 on DeepCrack under the GT-assisted alignment protocol. This supports the diagnostic value of aligned multi-prompt information, while indicating that the current confidence-weighted fusion rule is not reliably beneficial for crack segmentation.
+The highest diagnostic fusion IoU is obtained by simple mean fusion, not by confidence-weighted AMPF. Mean fusion improves foreground IoU over text prompting by 0.0232 on CrackForest and 0.0157 on DeepCrack under the GT-assisted alignment protocol. This result supports the diagnostic value of aligned multi-prompt information and indicates that the current confidence-weighted fusion rule is not reliably beneficial for crack segmentation.
 
-### 5.5 Paired Statistical Comparisons
+### 3.5 Paired Statistical Comparisons
 
-| Dataset | Comparison | n | Mean IoU Difference | Median IoU Difference | Wilcoxon p-value | Interpretation |
-|---|---|---:|---:|---:|---:|---|
-| DeepCrack | AMPF - without alignment | 237 | +0.1995 | +0.0353 | 1.16e-23 | Alignment is critical under the diagnostic protocol |
-| CrackForest | AMPF - without alignment | 24 | +0.0638 | 0.0000 | 0.0627 | Directionally positive but not significant |
-| DeepCrack | Mean fusion - Text | 237 | +0.0157 | +0.0054 | 0.00149 | Significant diagnostic gain, not deployable as-is |
-| CrackForest | Mean fusion - Text | 24 | +0.0232 | +0.0166 | 0.00225 | Significant diagnostic gain under GT-assisted alignment |
-| DeepCrack | AMPF - Text | 237 | +0.0013 | +0.0046 | 0.0754 | No significant IoU gain |
-| CrackForest | AMPF - Text | 24 | -0.0210 | +0.0084 | 0.473 | No significant IoU gain |
-| DeepCrack | Text - U-Net | 237 | -0.0003 | -0.0115 | 0.671 | No significant paired difference observed |
-| DeepCrack | Text - DeepLabV3+ | 237 | -0.0040 | -0.0152 | 0.413 | No significant paired difference observed |
-| CrackForest | Text - U-Net | 24 | -0.0221 | -0.0201 | 0.208 | No significant difference on the small split |
+The paired comparisons are reported by dataset to avoid mixing statistical quantities with interpretive text in a single wide table.
 
-These results reinforce the central claim for the evaluated visible surface-crack datasets: text prompting is the strongest deployable SAM3 baseline, while mean fusion is a promising but GT-assisted diagnostic result.
+| Comparison | n | Mean ΔIoU | Median ΔIoU | \(r_{\mathrm{rb}}\) | p-value |
+|---|---:|---:|---:|---:|---:|
+| AMPF - without alignment | 237 | +0.1995 | +0.0353 | +0.864 | 1.16e-23 |
+| Mean fusion - Text | 237 | +0.0157 | +0.0054 | +0.238 | 0.00149 |
+| AMPF - Text | 237 | +0.0013 | +0.0046 | +0.133 | 0.0754 |
+| Text - U-Net | 237 | -0.0003 | -0.0115 | -0.032 | 0.671 |
+| Text - DeepLabV3+ | 237 | -0.0040 | -0.0152 | -0.061 | 0.413 |
 
-### 5.6 Comparison with Supervised Baselines
+Table: DeepCrack paired comparisons. p-values are unadjusted Wilcoxon signed-rank p-values.
 
-| Method | Protocol | CrackForest IoU | CrackForest Dice | DeepCrack IoU | DeepCrack Dice |
-|---|---|---:|---:|---:|---:|
-| Text | automatic text prompt | 0.4355 | 0.6000 | 0.6658 | 0.7866 |
-| AMPF | GT-assisted fusion diagnostic | 0.4145 | 0.5737 | 0.6671 | 0.7880 |
-| Mean fusion | GT-assisted fusion diagnostic | **0.4587** | 0.6192 | **0.6815** | **0.8012** |
-| U-Net | supervised train/val/test | 0.4576 | **0.6236** | 0.6661 | 0.7855 |
-| DeepLabV3+ | supervised train/val/test | 0.4384 | 0.6004 | 0.6698 | 0.7906 |
-| YOLOv8-seg | supervised train/val/test | 0.3069 | 0.4533 | 0.4198 | 0.5652 |
+| Comparison | n | Mean ΔIoU | Median ΔIoU | \(r_{\mathrm{rb}}\) | p-value |
+|---|---:|---:|---:|---:|---:|
+| AMPF - without alignment | 24 | +0.0638 | 0.0000 | +0.529 | 0.0627 |
+| Mean fusion - Text | 24 | +0.0232 | +0.0166 | +0.687 | 0.00225 |
+| AMPF - Text | 24 | -0.0210 | +0.0084 | +0.173 | 0.473 |
+| Text - U-Net | 24 | -0.0221 | -0.0201 | -0.300 | 0.208 |
 
-On DeepCrack, no significant paired IoU difference is observed between automatic text prompting and the reference U-Net or DeepLabV3+ baselines. This is the main practical result. Mean fusion achieves the highest IoU, but it is not directly comparable as a deployable method because it uses GT-assisted prompting and alignment. On CrackForest, U-Net has the strongest supervised result, but the test set contains only 24 images, so this comparison should be treated cautiously.
+Table: CrackForest paired comparisons. p-values are unadjusted Wilcoxon signed-rank p-values.
 
-### 5.7 Qualitative Failure Mode Analysis
+On DeepCrack, alignment has the largest observed effect under the diagnostic protocol. Mean fusion provides a small GT-assisted diagnostic gain over Text, whereas AMPF does not provide a meaningful IoU gain over Text. Automatic text prompting also shows no significant paired IoU difference from the U-Net or DeepLabV3+ reference baselines. On CrackForest, mean fusion improves over Text under GT-assisted alignment, but the split contains only 24 test images. Text and U-Net do not differ significantly on that split.
 
-![Figure 4. Qualitative failure mode analysis across SAM3 prompt modes and fusion strategies.](experiments/visualizations/fig_qualitative_failure_modes.png)
+### 3.6 Protocol-Stratified Comparison with Supervised Baselines
 
-**Figure 4.** Qualitative failure mode analysis for four representative DeepCrack test images. Columns: original image, ground truth, text prompt, box prompt, point prompt, AMPF, and mean fusion. Masks are overlaid in color. AMPF and Mean Fusion use GT-assisted alignment and are diagnostic protocols; they are not shown as deployable alternatives. Row 1 (image 168): text over-segmentation. Text prompt achieves high recall (0.971) at low precision (0.266), capturing the crack region but also including background texture, shadows, and surface markings. Row 2 (image 86): point local recovery failure. Single-point prompts recover only local regions around each positive point and miss long linear crack branches; Point IoU is 0.000 versus Text IoU of 0.814. Row 3 (image 17): AMPF false negatives. Confidence-weighted AMPF suppresses background false positives but also suppresses true crack regions, reducing recall from 0.813 (Text) to 0.238 (AMPF) while foreground IoU drops from 0.724 to 0.232. Row 4 (image 178): mean fusion complementary recovery. Under GT-assisted instance alignment, simple mean fusion recovers complementary mask regions from multiple prompt modes, improving IoU from 0.493 (Text) to 0.857.
+Text is the deployable automatic protocol P1. AMPF and Mean fusion are GT-assisted diagnostic protocol P3. U-Net, DeepLabV3+, and YOLOv8-seg are supervised reference baselines P4.
 
-The four rows illustrate failure and success modes that are consistent with the quantitative trends in Sections 5.1-5.4. Text prompting is a strong high-recall baseline, but its low precision on images with complex surface texture and crack-like artifacts motivates post-processing or human review in screening workflows. Point prompting is structurally limited for elongated cracks under the one-point-per-component protocol; its diagnostic value lies in showing what local SAM3 masks look like, not in providing a deployable segmentation. AMPF's confidence-weighted filtering trades recall for precision without reliably improving foreground IoU, consistent with the ablation finding that the current confidence weights are not tuned for crack segmentation. Mean fusion demonstrates that aligned multi-prompt information contains complementary signal, but the result is protocol-constrained: both the prompts and the instance correspondence require ground truth. The qualitative comparison script is provided as `experiments/generate_qualitative_figure.py`.
+| Method | CF IoU | CF Dice | DC IoU | DC Dice |
+|---|---:|---:|---:|---:|
+| Text | 0.4355 | 0.6000 | 0.6658 | 0.7866 |
+| AMPF | 0.4145 | 0.5737 | 0.6671 | 0.7880 |
+| Mean fusion | 0.4587 | 0.6192 | 0.6815 | 0.8012 |
+| U-Net | 0.4576 | **0.6236** | 0.6661 | 0.7855 |
+| DeepLabV3+ | 0.4384 | 0.6004 | 0.6698 | 0.7906 |
+| YOLOv8-seg | 0.3069 | 0.4533 | 0.4198 | 0.5652 |
 
-## 6. Discussion
+Table: Protocol-stratified comparison between SAM3-based protocols and supervised reference baselines.
 
-### 6.1 Text Prompting Is the Strongest Deployable Baseline
+On DeepCrack, no significant paired IoU difference is observed between automatic text prompting and the reference U-Net or DeepLabV3+ baselines. This is the main deployment-relevant comparison. Mean fusion achieves the highest IoU, but it is not directly comparable as a deployable method because it uses GT-assisted prompting and alignment. On CrackForest, U-Net has the highest supervised result, but the test set contains only 24 images, so this comparison should be treated cautiously.
 
-The most actionable result is that a single text prompt, "crack", performs competitively on the evaluated visible surface-crack benchmarks without task-specific training. For similar pavement or concrete-surface imagery, this matters in three practical scenarios: rapid preliminary screening, semi-automatic annotation of crack datasets, and human-in-the-loop inspection where high recall is preferred before expert verification.
+Bold values in this table should be interpreted within their protocol context only; they do not indicate deployable superiority across automatic, GT-assisted, and supervised protocols.
 
-Text prompting is not ready to replace an operational inspection system by itself. Its precision is lower than the precision of AMPF and some supervised baselines, meaning it may over-segment shadows, stains, joints, texture, or other crack-like structures. However, high recall is valuable in inspection workflows where missed defects may be more costly than false alarms.
+### 3.7 Qualitative Failure Mode Analysis
 
-### 6.2 Spatial Prompts Need Better Deployment Protocols
+![](experiments/visualizations/fig_qualitative_failure_modes.png)
 
-The box and point results should not be read as a final verdict against spatial prompting. They are ground-truth-derived diagnostic baselines. The box protocol uses a single global foreground box, which can include large background regions. The point protocol uses one point per connected component, which is often too sparse for long cracks.
+**Figure 4.** Qualitative failure mode analysis for four representative DeepCrack test images. The cases were selected by predefined diagnostic criteria: text over-segmentation, point local-recovery failure, AMPF false-negative suppression, and mean-fusion complementary recovery. Columns show the original image, ground truth, text prompt, box prompt, point prompt, AMPF, and mean fusion. AMPF and Mean Fusion use GT-assisted alignment and are shown only as diagnostic protocols.
 
-A stronger deployable spatial protocol would require automatic region proposals, skeleton-based multi-point prompts, iterative point refinement, or human-in-the-loop correction. These variants were outside the scope of the current experiments but are natural next steps.
+The four rows illustrate failure and recovery modes consistent with the quantitative trends in Sections 3.1-3.4. Row 1 (image 168) illustrates text over-segmentation: recall is high (0.971), but precision is low (0.266) because the prediction includes background texture, shadows, and surface markings. Row 2 (image 86) illustrates point local-recovery failure: single-point prompts miss long linear crack branches, giving Point IoU of 0.000 versus Text IoU of 0.814. Row 3 (image 17) illustrates AMPF false-negative suppression: recall decreases from 0.813 (Text) to 0.238 (AMPF), and foreground IoU decreases from 0.724 to 0.232. Row 4 (image 178) illustrates mean-fusion complementary recovery under GT-assisted alignment, where IoU increases from 0.493 (Text) to 0.857. The qualitative comparison script is provided as `experiments/generate_qualitative_figure.py`.
 
-### 6.3 Alignment Is Necessary but Not Sufficient
+Additional diagnostics for candidate-level confidence calibration, AMPF weight sensitivity, and inference-time profiling are provided in the Supplementary Materials.
+
+## 4. Discussion
+
+### 4.1 Text Prompting as the Deployable Baseline
+
+The principal deployment-relevant finding is that a single text prompt, "crack", performs competitively on the evaluated visible surface-crack benchmarks without task-specific training. For similar pavement or concrete-surface imagery, this capability is relevant to rapid preliminary screening, semi-automatic annotation of crack datasets, and human-in-the-loop inspection where high recall is preferred before expert verification.
+
+Text prompting should not be used as a standalone replacement for an operational inspection system. Its precision is lower than the precision of AMPF and some supervised baselines, indicating over-segmentation of shadows, stains, joints, texture, or other crack-like structures. However, high recall remains relevant in inspection workflows where missed defects may be more costly than false alarms.
+
+### 4.2 Spatial Prompts Need Better Deployment Protocols
+
+The box and point results do not provide a general verdict on spatial prompting. They are ground-truth-derived diagnostic baselines. The box protocol uses a single global foreground box, which can include large background regions. The point protocol uses one point per connected component, which is often too sparse for long cracks.
+
+A deployable spatial protocol would require automatic region proposals, skeleton-based multi-point prompts, iterative point refinement, or human-in-the-loop correction. These variants were outside the scope of the current experiments and define priority directions for future work.
+
+### 4.3 Alignment Is Necessary but Not Sufficient
 
 The no-alignment ablation confirms that heterogeneous prompt outputs cannot be fused reliably without correspondence. Text, box, and point masks may refer to different spatial entities or different extents of the same crack. Ground-truth-assisted alignment removes this ambiguity for diagnostic purposes.
 
 However, alignment alone does not make the full AMPF pipeline superior to text prompting. The ablation results suggest that the confidence-weighted fusion rule is not reliably beneficial for cracks in its current form. Removing the stability component improves IoU, and mean fusion outperforms the confidence-weighted variant. Text synonym perturbations may change semantics rather than preserve a stable target concept; "fracture" and "fissure" are visually related to "crack" but may not behave as harmless perturbations in SAM3.
 
-### 6.4 Mean Fusion Is a Diagnostic Positive Result
+Additional calibration, weight-sensitivity, and runtime diagnostics are provided in the Supplementary Materials and are consistent with this interpretation.
 
-Mean fusion provides the clearest positive fusion result. It improves IoU over text prompting on both datasets under the GT-assisted alignment protocol. This suggests that multi-prompt information contains additional signal when candidates are aligned.
+### 4.4 Mean Fusion Is a Diagnostic Positive Result
 
-The deployment caveat is essential. Mean fusion does not yet define an operational algorithm because the prompts and alignment use ground truth. Its value is to motivate future work on automatic proposal generation and alignment, not to claim immediate replacement of supervised crack segmentation.
+Mean fusion provides the most favorable diagnostic fusion result. It improves IoU over text prompting on both datasets under the GT-assisted alignment protocol. This indicates that multi-prompt information contains additional signal when candidates are aligned.
 
-### 6.5 Relevance to AI-Driven Urban Development and Smart Infrastructure
+This result does not yet define an operational algorithm because both the prompts and the alignment use ground truth. Its role is to motivate future work on automatic proposal generation and alignment, not to claim immediate replacement of supervised crack segmentation.
+
+### 4.5 Relevance to AI-Driven Urban Development and Smart Infrastructure
 
 The study contributes to smart infrastructure inspection by evaluating a low-label, promptable segmentation approach for apparent surface-crack assessment. A practical workflow for similar image conditions could use mobile inspection vehicles, UAVs, or fixed cameras to collect imagery; apply SAM3 text prompting for high-recall crack screening; route uncertain cases to human review; and project reviewed masks into GIS or digital-twin maintenance layers. Such a workflow could reduce annotation burden and support maintenance prioritization across road segments, bridge components, or other asset records, but it should not be assumed to cover hidden damage, subsurface defects, severe occlusion, or substantially different imaging conditions without further validation.
 
-The results also provide a pragmatic warning for AI-driven infrastructure systems: foundation models should be evaluated under deployment-aware protocols. A method that uses ground truth during prompt generation or alignment may be useful for research diagnosis, but it should not be presented as a deployable smart-city inspection solution without an automatic or interactive mechanism replacing the ground-truth assistance.
+These results also have a methodological implication for AI-driven infrastructure systems: foundation models should be evaluated under deployment-aware protocols. A method that uses ground truth during prompt generation or alignment may support research diagnosis, but it should not be presented as a deployable smart-city inspection solution unless automatic or interactive mechanisms replace the ground-truth assistance.
 
-## 7. Limitations
+## 5. Limitations
 
 This study has several limitations.
 
@@ -325,54 +374,53 @@ Fourth, both public benchmarks mainly contain visually apparent surface cracks. 
 
 Fifth, the supervised baselines are reasonable reference models rather than exhaustively tuned state-of-the-art crack segmentation systems. The comparison contextualizes training-free SAM3 performance but does not prove superiority over all supervised methods.
 
-Sixth, runtime and memory usage are not analyzed in enough detail for real-time deployment. Sequential evaluation required several hours on an RTX 3090. Practical deployment would require batching, feature reuse, model compression, or selective prompting.
+Sixth, runtime is profiled only on a small DeepCrack subset in the Supplementary Materials, and memory usage is not analyzed in enough detail for real-time deployment. Practical deployment would still require batching, feature reuse, model compression, or selective prompting.
 
 Seventh, the experiments rely on the behavior of a specific SAM3 implementation and model checkpoint. Future SAM3 releases, thresholds, or inference interfaces may change the absolute numbers.
 
-## 8. Conclusion
+## 6. Conclusions
 
-This paper presented a protocol-aware evaluation of SAM3 prompt modes and fusion strategies for visible surface-crack segmentation in smart infrastructure inspection. The strongest deployable result within the evaluated benchmark conditions is automatic text prompting with the fixed prompt "crack", which achieves foreground IoU of 0.4355 on CrackForest and 0.6658 on DeepCrack without task-specific training. On DeepCrack, no significant paired IoU difference is observed between this text-prompt baseline and the reference supervised U-Net or DeepLabV3+ baselines.
+This paper presented a protocol-aware evaluation of SAM3 prompt modes and fusion strategies for visible surface-crack segmentation in smart infrastructure inspection. The most effective deployable protocol within the evaluated benchmark conditions is automatic text prompting with the fixed prompt "crack", which achieves foreground IoU of 0.4355 on CrackForest and 0.6658 on DeepCrack without task-specific training. On DeepCrack, no significant paired IoU difference is observed between this text-prompt baseline and the reference supervised U-Net or DeepLabV3+ baselines.
 
 Ground-truth-derived box and point prompts underperform text prompting in the current protocols. Correcting point prompts to nearest-foreground points substantially improves point performance, but one point per connected component remains insufficient for many elongated crack structures.
 
-The AMPF study shows that instance-level alignment is important for fusing heterogeneous prompt outputs, especially on DeepCrack. However, confidence-weighted AMPF does not significantly improve foreground IoU over text prompting. The best diagnostic fusion result is simple mean fusion under GT-assisted alignment, which reaches 0.4587 IoU on CrackForest and 0.6815 IoU on DeepCrack. This result shows that aligned multi-prompt information has value, but it is not directly deployable because it depends on ground-truth-derived prompts and alignment.
+The AMPF study indicates that instance-level alignment is important for fusing heterogeneous prompt outputs, especially on DeepCrack. However, confidence-weighted AMPF does not significantly improve foreground IoU over text prompting. The best diagnostic fusion result is simple mean fusion under GT-assisted alignment, which reaches 0.4587 IoU on CrackForest and 0.6815 IoU on DeepCrack. This indicates that aligned multi-prompt information has value, but it is not directly deployable because it depends on ground-truth-derived prompts and alignment.
 
-The practical recommendation is therefore conservative: for low-label screening or annotation support on imagery similar to CrackForest and DeepCrack, SAM3 text prompting should be treated as the primary deployable training-free baseline. Multi-prompt fusion is promising as a research direction, but future work must replace GT-assisted prompt generation and alignment with automatic proposals, human-in-the-loop input, or infrastructure-aware priors before claiming operational deployment across broader infrastructure inspection scenarios.
+Supplementary diagnostics further support the interpretation that the current AMPF confidence rule is not merely under-tuned and that the automatic text prompt is computationally simpler than the full AMPF diagnostic pipeline.
 
-## Data and Code Availability
+The deployment recommendation is therefore bounded: for low-label screening or annotation support on imagery similar to CrackForest and DeepCrack, SAM3 text prompting should be treated as the primary deployable training-free baseline. Multi-prompt fusion remains a research direction, but future work must replace GT-assisted prompt generation and alignment with automatic proposals, human-in-the-loop input, or infrastructure-aware priors before claiming operational deployment across broader infrastructure inspection scenarios.
 
-The manuscript is based on the project implementation and result files. The primary result files for the nearest-foreground point protocol are:
+## Supplementary Materials
 
-- `experiments/results/all_results_v2.csv`
-- `experiments/results/summary_stats_v2.csv`
-- `experiments/results/paper_tables_v2.tex`
-- `experiments/visualizations/fig_qualitative_failure_modes.png`
-- `experiments/visualizations/fig_qualitative_failure_modes.pdf`
-
-The main implementation files are:
-
-- `experiments/run_experiments.py`
-- `experiments/run_baselines.py`
-- `experiments/prompt_generator.py`
-- `experiments/evaluation.py`
-- `experiments/data_loader.py`
-- `backend/app/services/ampf_engine.py`
-- `backend/app/services/segmentation_service.py`
-- `experiments/plot_protocol_hierarchy.py`
-- `experiments/plot_iou_distribution.py`
-- `experiments/plot_precision_recall.py`
-- `experiments/generate_qualitative_figure.py`
-- `experiments/find_representative_cases.py`
-
-For peer review, the experiment code, result CSV files, table-generation script, figure-generation scripts, qualitative-figure script, and case-selection script are supplied as supplementary material. If the SAM3 weights cannot be redistributed with the replication package, the package should include instructions for obtaining the checkpoint through the official model release or the Ultralytics interface.
+The following supporting information is available in the supplementary file: Figure S1, candidate-level confidence calibration on DeepCrack; Figure S2, AMPF weight sensitivity on a 30-image DeepCrack subset; and Figure S3, inference time versus foreground IoU on a fixed 20-image DeepCrack profiling subset.
 
 ## Author Contributions
 
-Conceptualization, methodology, software, validation, formal analysis, investigation, data curation, writing-original draft, and writing-review and editing should be completed according to the final author list before submission.
+Xucai Liang: Conceptualization, Methodology, Software, Validation, Formal analysis, Investigation, Data curation, Visualization, and Writing - original draft. Dailing Jiang: Validation and Writing - review and editing. Chendong Ma: Supervision, Project administration, and Writing - review and editing. Xucai Liang and Dailing Jiang contributed equally to this work. All authors have read and agreed to the published version of the manuscript.
+
+## Funding
+
+No external funding was received for this study.
+
+## Institutional Review Board Statement
+
+Not applicable.
+
+## Informed Consent Statement
+
+Not applicable.
+
+## Data Availability Statement
+
+The project code, experiment scripts, result tables, and generated figures are available in the GitHub repository [github.com/xucailiang/sam3-demo](https://github.com/xucailiang/sam3-demo). The repository contains the per-image result CSV files, summary tables, candidate-confidence diagnostics, AMPF weight-sensitivity analysis, runtime-profiling output, and the scripts used to regenerate the tables and figures. CrackForest and DeepCrack are public datasets and should be obtained from their original providers under their respective licenses. SAM3 weights are not redistributed with this manuscript package and should be obtained through the official model release or the Ultralytics interface.
+
+## Acknowledgments
+
+The authors thank the maintainers of the public CrackForest and DeepCrack datasets and the open-source software projects used in the experiments.
 
 ## Conflicts of Interest
 
-The authors should declare any conflicts of interest before submission.
+The authors declare no conflicts of interest.
 
 ## References
 
@@ -391,12 +439,12 @@ The authors should declare any conflicts of interest before submission.
 13. Xie, S.; Tu, Z. Holistically-nested edge detection. In *Proceedings of ICCV*, 2015.
 14. Kirillov, A.; Mintun, E.; Ravi, N.; Mao, H.; Rolland, C.; Gustafson, L.; Xiao, T.; Whitehead, S.; Berg, A.C.; Lo, W.-Y.; Dollar, P.; Girshick, R. Segment Anything. In *Proceedings of ICCV*, 2023.
 15. Ravi, N.; Gabeur, V.; Hu, Y.-T.; Hu, R.; Ryali, C.; Ma, T.; Khedr, H.; Radle, R.; Rolland, C.; Gustafson, L.; et al. SAM 2: Segment Anything in images and videos. arXiv preprint arXiv:2408.00714, 2024.
-16. Carion, N.; Gustafson, L.; Hu, Y.-T.; Debnath, S.; Hu, R.; Suris, D.; Ryali, C.; Alwala, K.V.; Khedr, H.; Huang, A.; et al. SAM 3: Segment Anything with Concepts. arXiv preprint arXiv:2511.16719, 2025.
+16. Carion, N.; Gustafson, L.; Hu, Y.-T.; Debnath, S.; Hu, R.; Suris, D.; Ryali, C.; Alwala, K.V.; Khedr, H.; Huang, A.; et al. SAM 3: Segment Anything with Concepts. arXiv preprint arXiv:2511.16719, 2025; revised 2026.
 17. Ultralytics. SAM 3: Segment Anything with Concepts. Documentation. Available online: https://docs.ultralytics.com/models/sam-3/
 18. Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.; Jiang, Q.; Li, C.; Yang, J.; Su, H.; et al. Grounding DINO: Marrying DINO with grounded pre-training for open-set object detection. arXiv preprint arXiv:2303.05499, 2023.
 19. Ma, J.; He, Y.; Li, F.; Han, L.; You, C.; Wang, B. Segment anything in medical images. *Nature Communications* 2024, 15, 654.
-20. Owor, N.J.; et al. PaveSAM: Segment Anything for pavement distress. arXiv preprint, 2024.
-21. Zhang, Y.; et al. EVF-SAM: Early vision-language fusion for text-prompted Segment Anything Model. arXiv preprint, 2024.
+20. Owor, N.J.; Adu-Gyamfi, Y.; Aboah, A.; Amo-Boateng, M. PaveSAM: Segment Anything for pavement distress. *Road Materials and Pavement Design* 2024, 1-25; arXiv:2409.07295.
+21. Zhang, Y.; Cheng, T.; Zhu, L.; Hu, R.; Liu, L.; Liu, H.; Ran, L.; Chen, X.; Liu, W.; Wang, X. EVF-SAM: Early vision-language fusion for text-prompted Segment Anything Model. arXiv preprint arXiv:2406.20076, 2024; revised 2025.
 22. Ren, T.; Liu, S.; Zeng, A.; Lin, J.; Li, K.; Cao, H.; Chen, J.; Huang, X.; Chen, Y.; Yan, F.; et al. Grounded SAM: Assembling open-world models for diverse visual tasks. arXiv preprint arXiv:2401.14159, 2024.
 23. Ultralytics. YOLOv8 documentation and source code. Available online: https://github.com/ultralytics/ultralytics
 24. Gong, H.; Tesic, J.; Tao, J.; Luo, X.; Wang, F. Automated pavement crack detection with deep learning methods: What are the main factors and how to improve the performance? *Transportation Research Record* 2023.

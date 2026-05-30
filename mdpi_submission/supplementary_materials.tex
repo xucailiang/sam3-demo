@@ -1,0 +1,73 @@
+% MDPI Applied Sciences supplementary file draft
+\documentclass[applsci,supfile,submit,pdftex,moreauthors]{Definitions/mdpi}
+\firstpage{1}
+\makeatletter
+\setcounter{page}{\@firstpage}
+\makeatother
+\pubvolume{1}
+\issuenum{1}
+\articlenumber{0}
+\pubyear{2026}
+\copyrightyear{2026}
+\datereceived{}
+\daterevised{}
+\dateaccepted{}
+\datepublished{}
+\doinum{}
+\hreflink{https://doi.org/}
+\usepackage{float}
+\setlength{\headheight}{24.2pt}
+\renewcommand{\leftcolDates}{}
+\Title{Protocol-Aware Evaluation of SAM3 Prompt Modes and Fusion Strategies for Training-Free Crack Segmentation in Smart Infrastructure Inspection}
+\TitleCitation{Protocol-Aware Evaluation of SAM3 Prompt Modes and Fusion Strategies for Training-Free Crack Segmentation in Smart Infrastructure Inspection}
+\Author{Xucai Liang $^{1,\ddagger}$, Dailing Jiang $^{1,\ddagger}$ and Chendong Ma $^{1,}$*}
+\AuthorNames{Xucai Liang, Dailing Jiang and Chendong Ma}
+\AuthorCitation{Liang, X.; Jiang, D.; Ma, C.}
+\address[1]{%
+$^{1}$ \quad Hong Kong Generative AI Research \& Development Center}
+\corres{Correspondence: Chendong Ma, machendong\_intern@hkgai.org}
+\secondnote{These authors contributed equally to this work.}
+\begin{document}
+\begin{flushleft}
+\fontsize{8}{8}\selectfont
+$^{1}$ \quad Hong Kong Generative AI Research \& Development Center\\
+* \quad Correspondence: Chendong Ma, machendong\_intern@hkgai.org\\
+$^{\ddagger}$ \quad These authors contributed equally to this work.
+\end{flushleft}
+\vspace{6pt}
+
+\section{Supplementary Diagnostics for Confidence, Weights, and Runtime}
+
+These supplementary analyses test whether the AMPF conclusions are
+driven by candidate-confidence calibration, fusion-weight selection, or
+computational cost. The analyses are diagnostic and subset-specific;
+they are not used to expand the deployment claim beyond the evaluated
+visible surface-crack imagery.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_calibration_reliability.png}
+\caption{Candidate-level confidence calibration on DeepCrack. The analysis logs 3449 candidates from 237 DeepCrack test images and compares composite confidence with per-candidate IoU. Composite confidence systematically overestimates candidate IoU. Expected Calibration Error is 0.287 for text candidates, 0.362 for box candidates, and 0.469 for point candidates. These results indicate that the current confidence-weighted fusion rule is poorly calibrated for this visible surface-crack benchmark.}
+\label{fig:S1}
+\end{figure}
+
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_ampf_weight_sensitivity_heatmap.png}
+\caption{AMPF weight sensitivity on a 30-image DeepCrack subset. The grid evaluates 39 combinations of detection, stability, and boundary weights with $\gamma = 1-\alpha-\beta$ and $\gamma \geq 0$. A 0.1 grid step was used to keep the subset analysis tractable, so the manuscript setting $(\alpha=0.4,\beta=0.35,\gamma=0.25)$ is assessed through its neighboring grid points rather than rerun exactly in this sweep. Foreground IoU varies only from 0.5303 to 0.5484, with a coefficient of variation of 0.82\%. The best observed setting is $\alpha=0.5, \beta=0.1, \gamma=0.4$. The stability weight is negatively correlated with IoU ($r=-0.72$), while the boundary weight is positively correlated with IoU ($r=+0.54$). The neighboring grid points $(0.4,0.3,0.3)$ and $(0.4,0.4,0.2)$ have IoU 0.5386 and 0.5367, respectively.}
+\label{fig:S2}
+\end{figure}
+
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_runtime_accuracy_scatter.png}
+\caption{Inference time versus foreground IoU on a fixed 20-image DeepCrack profiling subset after warmup. Runtime values are intended as implementation-level profiling rather than a full deployment benchmark. Text prompting achieves 84.3 ms/image with mean IoU 0.680. Box prompting is fast but less accurate (74.9 ms/image, IoU 0.370). Point prompting is slow and low-performing under the one-point-per-component protocol (2990.8 ms/image, IoU 0.285). AMPF is the slowest tested SAM3 protocol (8866.2 ms/image, IoU 0.529), mainly because it combines multiple prompt modes with stability perturbation reruns. Mean fusion avoids confidence and stability scoring and is faster than AMPF (3248.0 ms/image, IoU 0.563), but it remains GT-assisted.}
+\label{fig:S3}
+\end{figure}
+
+
+\end{document}
