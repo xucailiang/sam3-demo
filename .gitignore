@@ -45,6 +45,7 @@ models/
 # Runtime outputs
 backend/runs/
 runs/
+experiments/results/ampf_weight_sensitivity_cache/
 # experiments/results/
 # experiments/visualizations/
 # experiments/datasets/
